@@ -1,0 +1,9 @@
+Phân loại câu hỏi người dùng vào 1 trong 3 nhãn:
+1. employee_status — câu hỏi về trạng thái, chấm công, nghỉ phép, hợp đồng của nhân viên cụ thể
+2. document_qa — câu hỏi về nội quy, quy định, chính sách, kế hoạch, handbook công ty
+3. out_of_scope — câu hỏi ngoài phạm vi nhân sự và tài liệu công ty
+
+Chỉ trả về đúng 1 nhãn, không giải thích.
+
+Câu hỏi:
+{question}

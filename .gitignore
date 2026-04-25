@@ -1,0 +1,29 @@
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Local databases and vector stores
+data/sqlite/*.db
+data/chroma/
+
+# Private source documents
+data/docs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Firebase credentials
+firebase-service-account.json
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,19 @@
+Dựa trên ngữ cảnh dưới đây, hãy trả lời câu hỏi của người dùng.
+Chỉ sử dụng thông tin có trong ngữ cảnh hoặc dữ liệu hệ thống được cung cấp.
+Nếu không đủ thông tin, nói rõ: "Tôi xin lỗi, không có thông tin cho câu hỏi này."
+Không được suy diễn hoặc bịa thông tin.
+
+[Vai trò người dùng]: {role}
+[Loại câu hỏi]: {intent}
+
+[Ngữ cảnh từ tài liệu]:
+{context}
+
+[Dữ liệu nhân viên từ hệ thống]:
+{employee_data}
+
+[Lịch sử hội thoại]:
+{conversation_history}
+
+[Câu hỏi]:
+{question}

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR RAG — Document Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0f1117;
+            --card-bg: #181a24;
+            --border: #2a2d3a;
+            --text-primary: #e8eaed;
+            --text-secondary: #8b8fa3;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --row-hover: rgba(99,102,241,0.04);
+            --success: #10b981;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        body {
+            font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 860px; margin: 0 auto; }
+
+        /* Header */
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+        .header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+        .conn-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+        .conn-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* Nav tabs */
+        .nav-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--card-bg); border-radius: 12px; padding: 4px; border: 1px solid var(--border); }
+        .nav-tab { flex: 1; padding: 10px 16px; border-radius: 9px; border: none; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .nav-tab.active { background: var(--accent); color: #fff; }
+        .nav-tab:hover:not(.active) { color: var(--text-primary); background: rgba(99,102,241,0.08); }
+
+        /* Stats */
+        .stats { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .stat-card { flex: 1 1 140px; padding: 18px 20px; border-radius: 14px; background: var(--card-bg); border: 1px solid var(--border); }
+        .stat-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 8px; }
+        .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -1px; }
+
+        /* Error banner */
+        .error-banner { padding: 12px 16px; border-radius: 10px; background: rgba(220,38,38,0.1); border: 1px solid rgba(220,38,38,0.2); color: #fca5a5; font-size: 13px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .error-banner button { background: none; border: none; color: #fca5a5; cursor: pointer; font-size: 16px; }
+
+        /* Upload zone */
+        .upload-zone { padding: 36px 20px; border-radius: 14px; border: 2px dashed var(--border); background: var(--card-bg); text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 20px; }
+        .upload-zone.dragover { border-color: var(--accent); background: rgba(99,102,241,0.06); }
+        .upload-zone .icon { font-size: 32px; margin-bottom: 8px; }
+        .upload-zone .title { font-size: 14px; font-weight: 600; }
+        .upload-zone .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* File list */
+        .file-list { border-radius: 14px; border: 1px solid var(--border); background: var(--card-bg); overflow: hidden; }
+        .file-list-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+        .file-list-header span { font-size: 14px; font-weight: 600; }
+        .file-row { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); gap: 16px; transition: background 0.15s; }
+        .file-row:last-child { border-bottom: none; }
+        .file-row:hover { background: var(--row-hover); }
+        .file-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .file-icon.pdf { background: #fde8e8; color: #b91c1c; }
+        .file-icon.docx { background: #dbeafe; color: #1e40af; }
+        .file-icon.txt { background: #e0f2e9; color: #166534; }
+        .file-info { flex: 1; min-width: 0; }
+        .file-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .file-actions { display: flex; gap: 6px; }
+        .empty-state { padding: 48px 20px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+        .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+
+        /* Badges */
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.3px; color: #fff; }
+        .badge.synced { background: #0d9488; }
+        .badge.pending { background: #d97706; }
+        .badge.error { background: #dc2626; }
+        .badge.ingesting { background: #6366f1; }
+
+        /* Buttons */
+        .btn { padding: 6px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-primary:disabled { background: var(--border); color: var(--text-secondary); cursor: not-allowed; }
+        .btn-outline { padding: 6px 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); }
+        .btn-outline:hover { border-color: var(--danger); color: var(--danger); }
+        .btn-outline:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Chat test panel */
+        .chat-panel { border-radius: 14px; border: 1px solid var(--border); background: var(--card-bg); overflow: hidden; }
+        .chat-messages { height: 380px; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .chat-msg { max-width: 85%; padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.6; word-wrap: break-word; }
+        .chat-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+        .chat-msg.bot { align-self: flex-start; background: #1e2030; color: var(--text-primary); border-bottom-left-radius: 4px; }
+        .chat-msg.bot .intent { font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+        .chat-msg.bot .sources { font-size: 11px; color: var(--accent); margin-top: 4px; }
+        .chat-input-bar { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
+        .chat-input-bar input { flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); font-size: 14px; font-family: inherit; outline: none; }
+        .chat-input-bar input:focus { border-color: var(--accent); }
+        .chat-input-bar select { padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); font-size: 12px; font-family: inherit; outline: none; }
+
+        /* Help box */
+        .help-box { margin-top: 20px; padding: 16px 20px; border-radius: 12px; background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.12); font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+        .help-box strong { color: var(--text-primary); }
+        code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container" id="app"></div>
+
+    <script>
+        // ===== CONFIG =====
+        const API_BASE = window.location.origin; // Auto-detect: same host as UI
+        const API_KEYS = {
+            employee: "demo_employee_001",
+            hr: "demo_hr_001",
+            manager: "demo_manager_001",
+            admin: "demo_admin_001",
+        };
+        let currentRole = "admin";
+        let currentTab = "documents"; // "documents" | "chat"
+
+        // ===== STATE =====
+        let state = {
+            connected: null,
+            files: [],
+            stats: { total_chunks: 0 },
+            health: null,
+            error: null,
+            ingestingFile: null,
+            ingestingAll: false,
+            chatMessages: [],
+            chatLoading: false,
+            sessionId: "session_" + Date.now(),
+        };
+
+        // ===== API HELPERS =====
+        function apiHeaders() {
+            return { "X-API-Key": API_KEYS[currentRole] };
+        }
+
+        async function loadData() {
+            try {
+                const [healthRes, statsRes] = await Promise.all([
+                    fetch(`${API_BASE}/health`, { headers: apiHeaders() }),
+                    fetch(`${API_BASE}/api/documents/stats`, { headers: apiHeaders() }),
+                ]);
+                state.health = await healthRes.json();
+                state.stats = await statsRes.json();
+                state.connected = true;
+                state.error = null;
+            } catch (e) {
+                state.connected = false;
+                state.error = "Không kết nối được server";
+            }
+            render();
+        }
+
+        async function ingestFile(file) {
+            state.ingestingFile = file.id;
+            render();
+            try {
+                const fd = new FormData();
+                fd.append("file", file.rawFile);
+                fd.append("title", file.name.replace(/\.[^.]+$/, ""));
+                fd.append("category", "general");
+                fd.append("access_level", "all");
+                const res = await fetch(`${API_BASE}/api/documents/ingest`, {
+                    method: "POST", headers: { "X-API-Key": API_KEYS.admin }, body: fd,
+                });
+                const data = await res.json();
+                if (data.status === "success") {
+                    file.status = "synced";
+                    file.chunks = data.chunks_created;
+                } else {
+                    file.status = "error";
+                    state.error = data.message || "Ingest thất bại";
+                }
+            } catch (e) {
+                file.status = "error";
+                state.error = e.message;
+            }
+            state.ingestingFile = null;
+            await loadData();
+        }
+
+        async function ingestAll() {
+            state.ingestingAll = true;
+            render();
+            for (const f of state.files.filter(f => f.status === "pending")) {
+                await ingestFile(f);
+            }
+            state.ingestingAll = false;
+            render();
+        }
+
+        async function sendChat(message) {
+            state.chatMessages.push({ role: "user", content: message });
+            state.chatLoading = true;
+            render();
+            scrollChat();
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: "POST",
+                    headers: { ...apiHeaders(), "Content-Type": "application/json" },
+                    body: JSON.stringify({ message, session_id: state.sessionId }),
+                });
+                const data = await res.json();
+                state.chatMessages.push({
+                    role: "bot",
+                    content: data.answer || data.error?.message || "Không có phản hồi",
+                    intent: data.intent,
+                    sources: data.sources,
+                });
+            } catch (e) {
+                state.chatMessages.push({ role: "bot", content: "Lỗi: " + e.message });
+            }
+            state.chatLoading = false;
+            render();
+            scrollChat();
+        }
+
+        function scrollChat() {
+            setTimeout(() => {
+                const el = document.getElementById("chat-messages");
+                if (el) el.scrollTop = el.scrollHeight;
+            }, 50);
+        }
+
+        // ===== FILE HANDLING =====
+        function addFiles(fileList) {
+            for (const f of fileList) {
+                const ext = f.name.split(".").pop().toLowerCase();
+                if (!["pdf", "docx", "txt"].includes(ext)) {
+                    state.error = `Không hỗ trợ .${ext}`;
+                    continue;
+                }
+                state.files.push({
+                    id: Date.now() + Math.random(),
+                    name: f.name,
+                    ext: "." + ext,
+                    status: "pending",
+                    chunks: null,
+                    rawFile: f,
+                });
+            }
+            render();
+        }
+
+        function removeFile(id) {
+            state.files = state.files.filter(f => f.id !== id);
+            render();
+        }
+
+        // ===== RENDER =====
+        function render() {
+            const app = document.getElementById("app");
+            const pendingCount = state.files.filter(f => f.status === "pending").length;
+            const syncedCount = state.files.filter(f => f.status === "synced").length;
+
+            app.innerHTML = `
+                <!-- Header -->
+                <div class="header">
+                    <div>
+                        <h1>📂 HR RAG — Admin Panel</h1>
+                        <p>Quản lý tài liệu, test chatbot, theo dõi trạng thái hệ thống</p>
+                    </div>
+                    <div class="conn-status">
+                        <span class="conn-dot" style="background:${state.connected === true ? '#10b981' : state.connected === false ? '#dc2626' : '#d97706'}"></span>
+                        ${state.connected === true ? 'Server OK' : state.connected === false ? 'Mất kết nối' : 'Đang kiểm tra...'}
+                    </div>
+                </div>
+
+                <!-- Nav tabs -->
+                <div class="nav-tabs">
+                    <button class="nav-tab ${currentTab === 'documents' ? 'active' : ''}" onclick="switchTab('documents')">📄 Tài liệu</button>
+                    <button class="nav-tab ${currentTab === 'chat' ? 'active' : ''}" onclick="switchTab('chat')">💬 Test Chat</button>
+                </div>
+
+                ${state.error ? `
+                <div class="error-banner">
+                    <span>⚠️ ${state.error}</span>
+                    <button onclick="state.error=null;render()">✕</button>
+                </div>` : ''}
+
+                <!-- Stats -->
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">🧩 Chunks trong DB</div>
+                        <div class="stat-value" style="color:#6366f1">${state.stats.total_chunks || 0}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">✅ Đã sync</div>
+                        <div class="stat-value" style="color:#10b981">${syncedCount}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">⏳ Chờ sync</div>
+                        <div class="stat-value" style="color:${pendingCount > 0 ? '#d97706' : 'var(--text-secondary)'}">${pendingCount}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">🤖 Gemini</div>
+                        <div class="stat-value" style="color:${state.health?.services?.gemini === 'configured' ? '#10b981' : '#dc2626'};font-size:20px">${state.health?.services?.gemini === 'configured' ? 'OK' : '—'}</div>
+                    </div>
+                </div>
+
+                ${currentTab === 'documents' ? renderDocuments(pendingCount) : renderChat()}
+            `;
+        }
+
+        function renderDocuments(pendingCount) {
+            return `
+                <!-- Upload zone -->
+                <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+                    <div class="icon">📤</div>
+                    <div class="title">Kéo thả file hoặc bấm để chọn</div>
+                    <div class="sub">Hỗ trợ: PDF, DOCX, TXT</div>
+                    <input id="file-input" type="file" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="addFiles(this.files);this.value=''">
+                </div>
+
+                <!-- File list -->
+                <div class="file-list">
+                    <div class="file-list-header">
+                        <span>Tài liệu (${state.files.length})</span>
+                        ${pendingCount > 0 ? `<button class="btn btn-primary" onclick="ingestAll()" ${state.ingestingAll ? 'disabled' : ''}>${state.ingestingAll ? '⟳ Đang sync...' : 'Sync tất cả (' + pendingCount + ')'}</button>` : ''}
+                    </div>
+                    ${state.files.length === 0 ? `
+                        <div class="empty-state">
+                            <div class="icon">📭</div>
+                            Chưa có file nào. Upload tài liệu ở trên để bắt đầu.
+                        </div>
+                    ` : state.files.map(f => renderFileRow(f)).join('')}
+                </div>
+
+                <div class="help-box">
+                    <strong>💡 Hướng dẫn:</strong><br>
+                    1. <strong>Upload</strong> file PDF/DOCX/TXT vào danh sách<br>
+                    2. Bấm <strong>Sync</strong> để chunk + embedding vào ChromaDB<br>
+                    3. Khi hiện <span style="color:#10b981">✓ Đã sync</span> là chatbot đã đọc được tài liệu<br>
+                    4. Qua tab <strong>💬 Test Chat</strong> để thử hỏi đáp
+                </div>
+            `;
+        }
+
+        function renderFileRow(f) {
+            const ingesting = state.ingestingFile === f.id;
+            const extClass = f.ext === '.pdf' ? 'pdf' : f.ext === '.docx' ? 'docx' : 'txt';
+            const icon = f.ext === '.pdf' ? '📄' : f.ext === '.docx' ? '📝' : '📃';
+            const statusMap = {
+                synced: '<span class="badge synced">✓ Đã sync</span>',
+                pending: '<span class="badge pending">◌ Chưa sync</span>',
+                error: '<span class="badge error">✕ Lỗi</span>',
+            };
+            const badge = ingesting ? '<span class="badge ingesting">⟳ Đang xử lý...</span>' : (statusMap[f.status] || statusMap.pending);
+
+            return `
+                <div class="file-row">
+                    <div class="file-icon ${extClass}">${icon}</div>
+                    <div class="file-info">
+                        <div class="file-name">${f.name}</div>
+                        <div class="file-meta">${f.ext.toUpperCase().slice(1)} • ${f.chunks ? f.chunks + ' chunks' : 'Chưa xử lý'}</div>
+                    </div>
+                    ${badge}
+                    <div class="file-actions">
+                        ${f.status !== 'synced' ? `<button class="btn btn-primary" onclick="ingestFile(state.files.find(x=>x.id===${f.id}))" ${ingesting ? 'disabled' : ''}>${ingesting ? '⟳' : 'Sync'}</button>` : ''}
+                        <button class="btn btn-outline" onclick="removeFile(${f.id})" ${ingesting ? 'disabled' : ''}>✕</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderChat() {
+            return `
+                <div class="chat-panel">
+                    <div class="chat-messages" id="chat-messages">
+                        ${state.chatMessages.length === 0 ? `
+                            <div class="empty-state">
+                                <div class="icon">💬</div>
+                                Gõ câu hỏi bên dưới để test chatbot.<br>
+                                Thử: "Ai đang nghỉ phép?" hoặc "Quy định nghỉ phép năm?"
+                            </div>
+                        ` : state.chatMessages.map(m => {
+                            if (m.role === 'user') {
+                                return `<div class="chat-msg user">${escapeHtml(m.content)}</div>`;
+                            } else {
+                                let extra = '';
+                                if (m.intent) extra += `<div class="intent">Intent: ${m.intent}</div>`;
+                                if (m.sources?.length) extra += `<div class="sources">📎 ${m.sources.map(s => s.title + (s.page ? ' (tr.' + s.page + ')' : '')).join(', ')}</div>`;
+                                return `<div class="chat-msg bot">${escapeHtml(m.content)}${extra}</div>`;
+                            }
+                        }).join('')}
+                        ${state.chatLoading ? '<div class="chat-msg bot" style="opacity:0.6">⟳ Đang suy nghĩ...</div>' : ''}
+                    </div>
+                    <div class="chat-input-bar">
+                        <select onchange="currentRole=this.value;render()">
+                            <option value="admin" ${currentRole==='admin'?'selected':''}>👑 Admin</option>
+                            <option value="hr" ${currentRole==='hr'?'selected':''}>🏢 HR</option>
+                            <option value="manager" ${currentRole==='manager'?'selected':''}>👔 Manager</option>
+                            <option value="employee" ${currentRole==='employee'?'selected':''}>👤 Employee</option>
+                        </select>
+                        <input type="text" id="chat-input" placeholder="Gõ câu hỏi..." onkeydown="if(event.key==='Enter')handleSend()">
+                        <button class="btn btn-primary" onclick="handleSend()" ${state.chatLoading ? 'disabled' : ''}>Gửi</button>
+                    </div>
+                </div>
+
+                <div class="help-box">
+                    <strong>💡 Câu hỏi mẫu:</strong><br>
+                    • Nhân viên: "Ai đang nghỉ phép?", "Hợp đồng ai sắp hết hạn?", "Có bao nhiêu nhân viên?"<br>
+                    • Tài liệu: "Quy định nghỉ phép năm?", "Thủ tục xin nghỉ?", "Chế độ bảo hiểm?"<br>
+                    • Đổi <strong>Role</strong> ở dropdown trái để test phân quyền
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function handleSend() {
+            const input = document.getElementById('chat-input');
+            if (!input || !input.value.trim() || state.chatLoading) return;
+            sendChat(input.value.trim());
+            input.value = '';
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            render();
+            if (tab === 'chat') scrollChat();
+        }
+
+        // ===== DRAG & DROP =====
+        document.addEventListener('dragover', e => { e.preventDefault(); });
+        document.addEventListener('drop', e => {
+            e.preventDefault();
+            const zone = document.getElementById('upload-zone');
+            if (zone) { zone.classList.remove('dragover'); }
+            if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+        });
+
+        // ===== INIT =====
+        loadData();
+        setInterval(loadData, 10000);
+        render();
+    </script>
+</body>
+</html>
