@@ -121,7 +121,6 @@ uvicorn app.main:app --reload --port 8000
 | URL | Description |
 |---|---|
 | http://localhost:8000/docs | Swagger UI |
-| http://localhost:8000/admin | Admin UI |
 | http://localhost:8000/health | Health check |
 
 ---
@@ -248,29 +247,6 @@ To add a new intent category, add a new key with at least 10–15 example questi
 
 ---
 
-## Testing
-
-```bash
-# Run all ground-truth questions and report latency
-python scripts/test_ground_truth.py
-
-# Run only the first 5 questions
-python scripts/test_ground_truth.py --count 5
-
-# Filter by topic
-python scripts/test_ground_truth.py --topic leave_policy
-
-# Use a different API key
-python scripts/test_ground_truth.py --api-key demo_hr_001
-
-# Save results to a JSON file
-python scripts/test_ground_truth.py --output results.json
-```
-
-The script reports per-question latency and aggregate stats (avg, p95, min, max). It does not evaluate answer correctness — use an LLM-based evaluator for semantic scoring.
-
----
-
 ## Project Structure
 
 ```
@@ -307,14 +283,11 @@ hr-rag-chatbot/
 │   │   ├── gemini_service.py        # Gemini LLM client
 │   │   ├── employee_service.py      # SQLite HR queries
 │   │   └── firestore_employee_service.py  # Firestore HR queries
-│   ├── static/                      # Admin UI (HTML)
 │   └── main.py                      # App entry point + startup warmup
 ├── data/
 │   ├── docs/                        # Source documents (PDF, DOCX, TXT)
 │   ├── chroma/                      # ChromaDB vector store (auto-created)
 │   └── sqlite/                      # SQLite database (auto-created)
-├── scripts/
-│   └── test_ground_truth.py         # End-to-end latency test runner
 ├── .env.example
 ├── requirements.txt
 └── CHANGES.md

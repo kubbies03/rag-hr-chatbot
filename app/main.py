@@ -6,7 +6,6 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from app.api.routes_chat import router as chat_router
 from app.api.routes_docs import router as docs_router
@@ -57,13 +56,6 @@ app.include_router(health_router, tags=["Health"])
 app.include_router(logs_router, tags=["Logs"])
 app.include_router(notify_router, tags=["Notifications"])
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-
-
-@app.get("/admin", include_in_schema=False)
-async def admin_ui():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -81,7 +73,6 @@ async def startup_event():
     loop.run_in_executor(None, _warmup_models)
 
     logger.info("Swagger UI:  http://localhost:8000/docs")
-    logger.info("Admin UI:    http://localhost:8000/admin")
     logger.info("Health:      http://localhost:8000/health")
 
 
@@ -139,7 +130,6 @@ def _warmup_models():
 async def root():
     return {
         "message": "HR RAG Chatbot API",
-        "admin_ui": "/admin",
         "docs": "/docs",
         "health": "/health",
     }
