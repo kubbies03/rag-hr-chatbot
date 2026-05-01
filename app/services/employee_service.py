@@ -1,20 +1,14 @@
-"""
-employee_service.py — Query employee data from SQLite.
-
-Handles questions about:
-- Employee status (active, on leave, resigned)
-- Attendance (late arrivals, remote, absent)
-- Leave requests (current leaves, pending approvals)
-- Contracts (expiring, probation)
-"""
+"""Query employee data from SQLite."""
 
 from datetime import date, timedelta
+
 from sqlalchemy.orm import Session
-from app.db.models import Employee, Attendance, LeaveRequest
+
+from app.db.models import Attendance, Employee, LeaveRequest
 
 
 def get_employee_by_name(db: Session, name: str) -> dict | None:
-    """Find employee by name (fuzzy match)."""
+    """Find an employee by fuzzy name match."""
     employee = db.query(Employee).filter(
         Employee.name.ilike(f"%{name}%")
     ).first()
@@ -22,7 +16,7 @@ def get_employee_by_name(db: Session, name: str) -> dict | None:
 
 
 def get_employee_by_code(db: Session, code: str) -> dict | None:
-    """Find employee by code."""
+    """Find an employee by code."""
     employee = db.query(Employee).filter(
         Employee.employee_code == code.upper()
     ).first()
@@ -30,7 +24,7 @@ def get_employee_by_code(db: Session, code: str) -> dict | None:
 
 
 def get_employees_on_leave(db: Session) -> list[dict]:
-    """Get employees currently on approved leave today."""
+    """Return employees on approved leave today."""
     today = date.today()
     leaves = db.query(LeaveRequest).filter(
         LeaveRequest.start_date <= today,
@@ -42,7 +36,7 @@ def get_employees_on_leave(db: Session) -> list[dict]:
 
 
 def get_employees_by_status(db: Session, status: str) -> list[dict]:
-    """Get employees filtered by status."""
+    """Return employees filtered by status."""
     employees = db.query(Employee).filter(
         Employee.status == status
     ).all()
@@ -50,7 +44,7 @@ def get_employees_by_status(db: Session, status: str) -> list[dict]:
 
 
 def get_today_attendance(db: Session) -> list[dict]:
-    """Get today's attendance records."""
+    """Return today's attendance records."""
     today = date.today()
     records = db.query(Attendance).filter(
         Attendance.date == today
@@ -59,7 +53,7 @@ def get_today_attendance(db: Session) -> list[dict]:
 
 
 def get_late_employees(db: Session, after_time: str = "09:00") -> list[dict]:
-    """Get employees who checked in late today."""
+    """Return employees who checked in late today."""
     today = date.today()
     records = db.query(Attendance).filter(
         Attendance.date == today,
@@ -70,7 +64,7 @@ def get_late_employees(db: Session, after_time: str = "09:00") -> list[dict]:
 
 
 def get_expiring_contracts(db: Session, within_days: int = 30) -> list[dict]:
-    """Get contracts expiring within the specified period."""
+    """Return contracts expiring within the given window."""
     today = date.today()
     deadline = today + timedelta(days=within_days)
     employees = db.query(Employee).filter(
@@ -83,7 +77,7 @@ def get_expiring_contracts(db: Session, within_days: int = 30) -> list[dict]:
 
 
 def get_pending_leave_requests(db: Session) -> list[dict]:
-    """Get leave requests pending approval."""
+    """Return pending leave requests."""
     requests = db.query(LeaveRequest).filter(
         LeaveRequest.status == "pending"
     ).all()
@@ -91,7 +85,7 @@ def get_pending_leave_requests(db: Session) -> list[dict]:
 
 
 def get_department_summary(db: Session, department: str) -> dict:
-    """Get department overview."""
+    """Return a department summary."""
     employees = db.query(Employee).filter(
         Employee.department == department,
         Employee.status != "resigned",
@@ -108,7 +102,7 @@ def get_department_summary(db: Session, department: str) -> dict:
 
 
 def get_all_stats(db: Session) -> dict:
-    """Get company-wide HR statistics."""
+    """Return company-wide HR stats."""
     all_emps = db.query(Employee).filter(Employee.status != "resigned").all()
     today_leaves = get_employees_on_leave(db)
     expiring = get_expiring_contracts(db)
@@ -125,7 +119,7 @@ def get_all_stats(db: Session) -> dict:
 
 
 def format_employee_data(data) -> str:
-    """Format employee data into readable text for LLM prompts."""
+    """Format employee data for prompts."""
     if not data:
         return "No employee data found."
 
