@@ -2,35 +2,35 @@
 
 ## Metadata
 
-- Project: `hr-rag-chatbot`
-- Test file: `scripts/test_ground_truth.py`
-- Ground truth: `scripts/ground_truth_rag.json`
-- Run date: `2026-05-01`
-- Command: `python -X utf8 scripts/test_ground_truth.py`
-- Endpoint: `http://127.0.0.1:8000/api/chat`
-- Health check: `OK`
+- Project: hr-rag-chatbot
+- Test file: scripts/test_ground_truth.py
+- Ground truth: scripts/ground_truth_rag.json
+- Run date: 2026-05-01
+- Command: python -X utf8 scripts/test_ground_truth.py
+- Endpoint: http://127.0.0.1:8000/api/chat
+- Health check: OK
 
 ## Summary
 
-- Total questions: `29`
-- Request errors: `0`
-- Average latency: `5242 ms`
-- P95 latency: `12439 ms`
-- Min latency: `31 ms - errors`
-- Max latency: `12663 ms`
+- Total questions: 29
+- Request errors: 0
+- Average latency: 5242 ms
+- P95 latency: 12439 ms
+- Min latency: 31 ms - errors
+- Max latency: 12663 ms
 
 ## Accuracy
 
-- Strict accuracy: `26/29 = 89.7%`
-- `document_qa`: `22/24 = 91.7%`
-- `employee_status`: `2/2 = 100%`
-- `out_of_scope`: `3/3 = 100%`
+- Strict accuracy: 26/29 = 89.7%
+- document_qa: 22/24 = 91.7%
+- employee_status: 2/2 = 100%
+- out_of_scope: 3/3 = 100%
 
 ## Overall Notes
 
 - The system is stable for this dataset: all 29 requests returned successfully.
-- `document_qa` cases generally work, but some answers are broader than the expected snippets.
-- `employee_status` and `out_of_scope` routing behaved as expected for the test set.
+- document_qa cases generally work, but some answers are broader than the expected snippets.
+- employee_status and out_of_scope routing behaved as expected for the test set.
 - The slowest cases are document questions that likely trigger retrieval plus generation over large context.
 
 ## Case Results
@@ -63,17 +63,17 @@
 | gt-024 | document_qa | 11815 ms | Pass | Bonus grading answer matched. |
 | gt-025 | out_of_scope | 7096 ms | Pass | Router correctly rejected the law question as out of scope. |
 | gt-026 | employee_status | 6394 ms | Pass | Leave status answer matched the demo data. |
-| gt-027 | employee_status | 4059 ms | Partial | System returned `14` employees, while the ground truth currently expects `18`. The demo seed or the expected answer needs alignment. |
+| gt-027 | employee_status | 4059 ms | Partial | System returned 14 employees, while the ground truth currently expects 18. The demo seed or the expected answer needs alignment. |
 | gt-028 | out_of_scope | 58 ms | Pass | Correctly rejected weather question. |
 | gt-029 | out_of_scope | 51 ms | Pass | Correctly rejected poem request. |
 
 ## Mismatches To Fix
 
-- `gt-016`: The current system does not confirm OT rate tables from this document set. Update the expected answer or remove this case.
-- `gt-019`: The current system returned no information for the reimbursement timing question. Verify whether the source exists or adjust the expected answer.
-- `gt-027`: The current SQLite demo seed currently yields `14` active/non-resigned employees for the overview response. Align the expected answer to the live seed data.
+- gt-016: The current system does not confirm OT rate tables from this document set. Update the expected answer or remove this case.
+- gt-019: The current system returned no information for the reimbursement timing question. Verify whether the source exists or adjust the expected answer.
+- gt-027: The current SQLite demo seed currently yields 14 active/non-resigned employees for the overview response. Align the expected answer to the live seed data.
 
 ## Recommendation
 
 - Keep the current dataset, but revise the three partial cases above before using this file for regression gating.
-- If you want stricter evaluation, add a scoring layer that compares `expected_intent`, `reference_snippet`, and a normalized answer similarity score.
+- If you want stricter evaluation, add a scoring layer that compares expected_intent, reference_snippet, and a normalized answer similarity score.

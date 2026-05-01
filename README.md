@@ -1,159 +1,81 @@
 # HR RAG Chatbot
 
-A production-ready HR chatbot backend that answers employee status queries and internal policy questions using a hybrid RAG pipeline.
-
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-orange?logo=google&logoColor=white)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-vector_store-purple)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
-
----
+HR chatbot backend for employee status queries and internal policy questions using a hybrid RAG pipeline.
 
 ## Overview
 
-HR RAG Chatbot routes natural language questions through a multi-stage pipeline:
+- Employee status questions are answered from live HR data.
+- Policy and procedure questions are answered from ingested internal documents.
+- Out-of-scope questions are politely declined.
 
-- **Employee status questions** → answered from live HR data (SQLite / Firestore)
-- **Policy & procedure questions** → answered from ingested internal documents via RAG
-- **Out-of-scope questions** → politely declined
-
-The system classifies intent using a three-layer approach (embedding k-NN → keyword regex → LLM fallback), retrieves relevant document chunks with role-based access control, reranks them with a cross-encoder, and generates answers with Gemini.
-
----
+The system uses a three-stage intent classifier, vector retrieval, optional reranking, and Gemini-based answer generation.
 
 ## Architecture
 
-```
+```text
 POST /api/chat
-      │
-      ├── Authentication
-      │     ├── X-API-Key (demo mode)
-      │     └── Firebase Bearer token (production)
-      │
-      ├── Intent Classification
-      │     ├── 1. Embedding k-NN  (BGE-M3, ~20 ms)
-      │     ├── 2. Keyword regex   (~1 ms)
-      │     └── 3. LLM fallback    (Gemini, ~2 s)
-      │
-      ├── [employee_status] ──► SQLite / Firestore
-      │
-      ├── [document_qa]
-      │     ├── Vector retrieval   (ChromaDB + BGE-M3)
-      │     ├── Reranking          (BGE-reranker-v2-m3)
-      │     └── RBAC filter        (role-based access)
-      │
-      └── Answer generation (Gemini 2.5 Flash)
+  -> Authentication
+  -> Intent classification
+  -> employee_status or document_qa or out_of_scope
+  -> Retrieval / HR lookup
+  -> Answer generation
 ```
-
----
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| API | FastAPI · Uvicorn |
+| API | FastAPI, Uvicorn |
 | LLM | Google Gemini 2.5 Flash |
-| Embeddings | `BAAI/bge-m3` (local · GPU) |
-| Reranker | `BAAI/bge-reranker-v2-m3` (local · GPU) |
-| Vector Store | ChromaDB (persistent) |
-| Database | SQLite · SQLAlchemy |
-| Authentication | Firebase Auth · API key (demo) |
+| Embeddings | BAAI/bge-m3 |
+| Reranker | BAAI/bge-reranker-v2-m3 |
+| Vector store | ChromaDB |
+| Database | SQLite, SQLAlchemy |
+| Authentication | Firebase Auth, demo API key |
 | Notifications | Firebase Cloud Messaging |
-
----
 
 ## Features
 
-- **Hybrid intent classification** — BGE-M3 k-NN + regex + LLM, extensible by editing a JSON file
-- **Reranked RAG** — vector retrieval followed by cross-encoder reranking for precision
-- **Role-based access control** — document access filtered per user role at query time
-- **Dual data source** — Firestore for production, SQLite fallback for local dev
-- **Conversation history** — last 3 exchanges persisted in SQLite per session
-- **Response cache** — TTL-based in-memory cache for repeated `document_qa` queries
-- **Request logging** — every query logged with intent, latency, user, and role
-
----
+- Hybrid intent classification with embedding k-NN, regex, and LLM fallback
+- Reranked RAG for policy questions
+- Role-based document access filtering
+- SQLite fallback for local development
+- Conversation history persistence
+- Request logging with latency tracking
 
 ## Requirements
 
 - Python 3.11+
-- CUDA-capable GPU (recommended — embedding and reranker models run on GPU)
 - Google Gemini API key
-- Firebase service account *(optional — required for production auth and Firestore)*
-
----
-
-## Getting Started
-
-**1. Clone and install**
-
-```bash
-git clone https://github.com/your-org/hr-rag-chatbot.git
-cd hr-rag-chatbot
-
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Linux / macOS
-
-pip install -r requirements.txt
-```
-
-**2. Configure environment**
-
-```bash
-cp .env.example .env
-# Open .env and set GOOGLE_API_KEY
-```
-
-**3. Seed demo data**
-
-```bash
-python -m app.db.seed
-```
-
-**4. Start the server**
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-| URL | Description |
-|---|---|
-| http://localhost:8000/docs | Swagger UI |
-| http://localhost:8000/health | Health check |
-
----
+- Firebase service account, optional for production auth and Firestore
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |---|---|---|
-| `GOOGLE_API_KEY` | Gemini API key **(required)** | — |
+| `GOOGLE_API_KEY` | Gemini API key | required |
 | `LOCAL_EMBEDDING_MODEL` | HuggingFace embedding model | `BAAI/bge-m3` |
 | `RERANKER_MODEL` | Cross-encoder reranker model | `BAAI/bge-reranker-v2-m3` |
-| `USE_RERANKER` | Enable / disable reranking | `true` |
-| `RERANKER_MIN_SCORE` | Minimum reranker score (0–1) | `0.3` |
+| `USE_RERANKER` | Enable reranking | `true` |
+| `RERANKER_MIN_SCORE` | Minimum reranker score | `0.3` |
 | `DATABASE_URL` | SQLite connection string | `sqlite:///data/sqlite/hr.db` |
 | `CHROMA_PERSIST_DIR` | ChromaDB storage directory | `data/chroma` |
 | `DOCS_DIR` | Source documents directory | `data/docs` |
-| `FIREBASE_PROJECT_ID` | Firebase project ID | — |
+| `FIREBASE_PROJECT_ID` | Firebase project ID | required for production |
 | `FIREBASE_CREDENTIALS_PATH` | Path to service account JSON | `firebase-service-account.json` |
-
----
 
 ## Authentication
 
-### Demo mode (local development)
+### Demo mode
 
-Pass one of the following keys in the `X-API-Key` header:
+Pass one of the demo keys in the `X-API-Key` header.
 
-| Key | Role | Department |
-|---|---|---|
-| `demo_employee_001` | employee | engineering |
-| `demo_hr_001` | hr | hr |
-| `demo_manager_001` | manager | engineering |
-| `demo_admin_001` | admin | management |
+| Key | Role |
+|---|---|
+| `demo_employee_001` | employee |
+| `demo_hr_001` | hr |
+| `demo_manager_001` | manager |
+| `demo_admin_001` | admin |
 
 ### Production mode
 
@@ -161,11 +83,9 @@ Pass one of the following keys in the `X-API-Key` header:
 Authorization: Bearer <firebase_id_token>
 ```
 
----
-
 ## API Reference
 
-### Send a message
+### Chat
 
 ```http
 POST /api/chat
@@ -178,127 +98,67 @@ Content-Type: application/json
 }
 ```
 
-```json
-{
-  "answer": "Employees are entitled to 12 days of annual leave per year...",
-  "intent": "document_qa",
-  "sources": [
-    { "title": "Company Handbook", "page": 12, "file": "handbook.pdf" }
-  ],
-  "error": null
-}
-```
-
 ### Other endpoints
 
-| Method | Endpoint | Auth required | Description |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | No | Service health check |
 | `POST` | `/api/chat` | Yes | Main chat endpoint |
 | `POST` | `/api/docs/ingest` | admin | Upload and index a document |
 | `GET` | `/api/docs/stats` | Yes | Vector store statistics |
-| `GET` | `/api/employees` | hr · manager · admin | List employees |
-| `GET` | `/api/employees/on-leave` | hr · manager · admin | Employees currently on leave |
+| `GET` | `/api/employees` | hr / manager / admin | List employees |
+| `GET` | `/api/employees/on-leave` | hr / manager / admin | Employees currently on leave |
 | `GET` | `/api/logs` | admin | Query history and latency log |
-| `POST` | `/api/notify` | hr · admin | Send push notification via FCM |
-
----
-
-## Ingesting Documents
-
-Place files in `data/docs/` or upload via API. Supported formats: `.pdf`, `.docx`, `.txt`
-
-```bash
-curl -X POST http://localhost:8000/api/docs/ingest \
-  -H "X-API-Key: demo_admin_001" \
-  -F "file=@data/docs/handbook.pdf" \
-  -F "category=policy" \
-  -F "access_level=all"
-```
-
-Access levels: `all` (visible to everyone) or a specific role (`hr`, `manager`, `admin`).
-
----
+| `POST` | `/api/notify` | hr / admin | Send push notification via FCM |
 
 ## Extending Intent Classification
 
-The intent classifier uses embedding k-NN — no code changes needed to add new phrasings.
+Edit `app/data/intent_examples.json` and restart the server to add new phrasings or new intent groups.
 
-Edit `app/data/intent_examples.json` and restart the server:
+## Benchmark Results
 
-```json
-{
-  "employee_status": [
-    "Who is on leave today?",
-    "Show me the attendance list for this morning"
-  ],
-  "document_qa": [
-    "How many days of annual leave do I get?",
-    "What is the remote work policy?"
-  ],
-  "out_of_scope": [
-    "What is the weather like today?",
-    "Recommend a restaurant near me"
-  ]
-}
-```
+> Run date: 2026-05-01 | 29 questions | 0 request errors
 
-To add a new intent category, add a new key with at least 10–15 example questions and restart.
+| Metric | Value |
+|---|---|
+| Overall accuracy | 89.7% (26 / 29) |
+| document_qa | 91.7% (22 / 24) |
+| employee_status | 100% (2 / 2) |
+| out_of_scope | 100% (3 / 3) |
+| Avg latency | 5242 ms |
+| P95 latency | 12439 ms |
 
----
+> Cached responses return in 30-60 ms. Slow cases (10-12 s) involve live retrieval plus Gemini generation over large context.
+
+> Full report: [docs/ground_truth_test_report_2026-05-01.md](docs/ground_truth_test_report_2026-05-01.md)
 
 ## Project Structure
 
-```
+```text
 hr-rag-chatbot/
 ├── app/
 │   ├── api/
-│   │   ├── routes_chat.py           # POST /api/chat
-│   │   ├── routes_docs.py           # Document ingestion
-│   │   ├── routes_employee.py       # Employee data endpoints
-│   │   ├── routes_logs.py           # Query log viewer
-│   │   ├── routes_notify.py         # FCM notifications
-│   │   └── routes_health.py         # Health check
 │   ├── core/
-│   │   ├── config.py                # Settings singleton
-│   │   └── security.py              # Auth — demo keys + Firebase
 │   ├── data/
-│   │   └── intent_examples.json     # k-NN classifier training examples
 │   ├── db/
-│   │   ├── models.py                # SQLAlchemy table definitions
-│   │   ├── session.py               # DB session factory
-│   │   └── seed.py                  # Demo data seeder
 │   ├── prompts/
-│   │   ├── system_prompt.txt        # LLM system instructions
-│   │   ├── answer_prompt.txt        # Answer generation template
-│   │   └── router_prompt.txt        # Intent classification prompt
 │   ├── services/
-│   │   ├── rag_service.py           # Main orchestration layer
-│   │   ├── intent_service.py        # Intent classification (regex + LLM)
-│   │   ├── intent_classifier_service.py  # BGE-M3 k-NN classifier
-│   │   ├── retriever_service.py     # ChromaDB vector search + RBAC
-│   │   ├── reranker_service.py      # Cross-encoder reranking
-│   │   ├── embedding_service.py     # BGE-M3 embedding wrapper
-│   │   ├── ingest_service.py        # Document ingestion pipeline
-│   │   ├── gemini_service.py        # Gemini LLM client
-│   │   ├── employee_service.py      # SQLite HR queries
-│   │   └── firestore_employee_service.py  # Firestore HR queries
-│   └── main.py                      # App entry point + startup warmup
+│   └── main.py
 ├── data/
-│   ├── docs/                        # Source documents (PDF, DOCX, TXT)
-│   ├── chroma/                      # ChromaDB vector store (auto-created)
-│   └── sqlite/                      # SQLite database (auto-created)
+│   ├── docs/
+│   ├── chroma/
+│   └── sqlite/
+├── docs/
+├── tests/
 ├── .env.example
-├── requirements.txt
-└── CHANGES.md
+├── README.md
+└── requirements.txt
 ```
-
----
 
 ## Known Limitations
 
-- **In-process cache** — intent and response caches are not shared across multiple Uvicorn workers
-- **No rate limiting** — the `/api/chat` endpoint has no request throttling
-- **CORS** — currently allows all origins (`*`); restrict for production
-- **Gemini latency** — API response time is variable (5–19 s) and outside server control
-- **`.doc` format** — legacy Word files require MS Word COM automation (Windows only); use `.docx` instead
+- In-process cache is not shared across multiple workers
+- No request throttling on the chat endpoint
+- CORS currently allows all origins
+- Gemini latency varies with upstream load
+- Legacy `.doc` files still require Windows COM automation
