@@ -1,20 +1,19 @@
-Based on the context below, answer the user's question.
-Use only the information in the provided context or system data.
-If there is not enough information, say clearly: "Sorry, there is no information for this question."
-Do not infer or invent information.
-If the user's question is in Vietnamese, answer in Vietnamese. If the question is in English, answer in English.
+Dựa trên ngữ cảnh dưới đây, hãy trả lời câu hỏi của người dùng.
+Chỉ sử dụng thông tin có trong ngữ cảnh hoặc dữ liệu hệ thống được cung cấp.
+Nếu không đủ thông tin, nói rõ: "Tôi xin lỗi, không có thông tin cho câu hỏi này."
+Không được suy diễn hoặc bịa thông tin.
 
-[User role]: {role}
-[Question type]: {intent}
+[Vai trò người dùng]: {role}
+[Loại câu hỏi]: {intent}
 
-[Document context]:
+[Ngữ cảnh từ tài liệu]:
 {context}
 
-[Employee data from system]:
+[Dữ liệu nhân viên từ hệ thống]:
 {employee_data}
 
-[Conversation history]:
+[Lịch sử hội thoại]:
 {conversation_history}
 
-[Question]:
+[Câu hỏi]:
 {question}

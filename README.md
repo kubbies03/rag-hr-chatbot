@@ -1,331 +1,305 @@
 # HR RAG Chatbot
 
-A production-ready HR chatbot backend that answers employee status queries and internal policy questions using a hybrid RAG pipeline.
+FastAPI backend for an HR assistant that answers two kinds of questions:
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-orange?logo=google&logoColor=white)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-vector_store-purple)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+- Real-time employee status questions from HR data
+- Internal policy and procedure questions from company documents using RAG
 
----
+The system is designed for mobile or web clients that need a single chat endpoint, role-aware access control, source citations, and optional Firebase integration.
 
-## Overview
+![Chat Demo](image_demo_vnese.png)
+## Features
 
-HR RAG Chatbot routes natural language questions through a multi-stage pipeline:
-
-- **Employee status questions** → answered from live HR data (SQLite / Firestore)
-- **Policy & procedure questions** → answered from ingested internal documents via RAG
-- **Out-of-scope questions** → politely declined
-
-The system classifies intent using a three-layer approach (embedding k-NN → keyword regex → LLM fallback), retrieves relevant document chunks with role-based access control, reranks them with a cross-encoder, and generates answers with Gemini.
-
----
+- Hybrid chat pipeline that routes between employee-data lookup and document RAG
+- FastAPI REST API with Swagger docs
+- Gemini-based intent classification, answer generation, and embeddings
+- ChromaDB vector store for internal documents
+- SQLite demo database for local development
+- Firebase Auth and Firestore support for production-style integration
+- Demo API keys for local testing without Firebase
+- FCM notification endpoint for mobile push experiments
 
 ## Architecture
 
-```
-POST /api/chat
-      │
-      ├── Authentication
-      │     ├── X-API-Key (demo mode)
-      │     └── Firebase Bearer token (production)
-      │
-      ├── Intent Classification
-      │     ├── 1. Embedding k-NN  (BGE-M3, ~20 ms)
-      │     ├── 2. Keyword regex   (~1 ms)
-      │     └── 3. LLM fallback    (Gemini, ~2 s)
-      │
-      ├── [employee_status] ──► SQLite / Firestore
-      │
-      ├── [document_qa]
-      │     ├── Vector retrieval   (ChromaDB + BGE-M3)
-      │     ├── Reranking          (BGE-reranker-v2-m3)
-      │     └── RBAC filter        (role-based access)
-      │
-      └── Answer generation (Gemini 2.5 Flash)
-```
+The request flow is:
 
----
+1. Client calls `POST /api/chat`
+2. `app.core.security` authenticates the caller with `X-API-Key` or Firebase Bearer token
+3. `app.services.intent_service` classifies the question as:
+   - `employee_status`
+   - `document_qa`
+   - `out_of_scope`
+4. `app.services.rag_service` dispatches to:
+   - Firestore or SQLite employee lookup for operational HR questions
+   - Chroma retrieval for policy and handbook questions
+5. `app.services.gemini_service` generates the final answer
+6. API returns the answer, detected intent, and source metadata when documents were used
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| API | FastAPI · Uvicorn |
-| LLM | Google Gemini 2.5 Flash |
-| Embeddings | `BAAI/bge-m3` (local · GPU) |
-| Reranker | `BAAI/bge-reranker-v2-m3` (local · GPU) |
-| Vector Store | ChromaDB (persistent) |
-| Database | SQLite · SQLAlchemy |
-| Authentication | Firebase Auth · API key (demo) |
+| API | FastAPI, Uvicorn |
+| LLM | Google Gemini |
+| Embeddings | Gemini Embeddings |
+| RAG / Retrieval | LangChain, ChromaDB |
+| Relational DB | SQLite, SQLAlchemy |
+| Auth / Realtime HR data | Firebase Auth, Firestore |
 | Notifications | Firebase Cloud Messaging |
 
----
+## Project Structure
 
-## Features
-
-- **Hybrid intent classification** — BGE-M3 k-NN + regex + LLM, extensible by editing a JSON file
-- **Reranked RAG** — vector retrieval followed by cross-encoder reranking for precision
-- **Role-based access control** — document access filtered per user role at query time
-- **Dual data source** — Firestore for production, SQLite fallback for local dev
-- **Conversation history** — last 3 exchanges persisted in SQLite per session
-- **Response cache** — TTL-based in-memory cache for repeated `document_qa` queries
-- **Request logging** — every query logged with intent, latency, user, and role
-
----
+```text
+app/
+  api/          FastAPI route modules
+  core/         Configuration and authentication
+  db/           SQLAlchemy models, session, seed script
+  prompts/      Prompt templates for routing and answer generation
+  services/     Intent routing, RAG, embeddings, Gemini, Firestore access
+  static/       Simple admin/demo UI
+data/
+  docs/         Source documents to ingest
+  sqlite/       Local demo database
+  chroma/       Vector store persistence
+tests/          Test directory placeholder
+```
 
 ## Requirements
 
-- Python 3.11+
-- CUDA-capable GPU (recommended — embedding and reranker models run on GPU)
-- Google Gemini API key
-- Firebase service account *(optional — required for production auth and Firestore)*
+- Python 3.11
+- A Gemini API key for AI features
+- Optional Firebase service account for Firebase Auth, Firestore, and FCM
 
----
+## Quick Start
 
-## Getting Started
-
-**1. Clone and install**
+### 1. Clone and create a virtual environment
 
 ```bash
-git clone https://github.com/your-org/hr-rag-chatbot.git
+git clone <your-repo-url>
 cd hr-rag-chatbot
-
 python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Linux / macOS
-
-pip install -r requirements.txt
 ```
 
-**2. Configure environment**
+Activate it:
 
 ```bash
-cp .env.example .env
-# Open .env and set GOOGLE_API_KEY
+# Windows
+venv\Scripts\activate
+
+# Linux / macOS
+source venv/bin/activate
 ```
 
-**3. Seed demo data**
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+pip install langchain-text-splitters
+```
+
+### 3. Configure environment variables
+
+Create a local env file from the example:
+
+```bash
+copy .env.example .env
+```
+
+Then set at least:
+
+```env
+GOOGLE_API_KEY=your_gemini_api_key
+APP_ENV=development
+APP_DEBUG=true
+```
+
+If you want Firebase features, also configure:
+
+```env
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CREDENTIALS_PATH=firebase-service-account.json
+```
+
+### 4. Seed demo data
 
 ```bash
 python -m app.db.seed
 ```
 
-**4. Start the server**
+This creates:
+
+- Demo employee data in SQLite
+- Attendance records
+- Leave requests
+- Required local data folders
+
+### 5. Start the API
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-| URL | Description |
-|---|---|
-| http://localhost:8000/docs | Swagger UI |
-| http://localhost:8000/admin | Admin UI |
-| http://localhost:8000/health | Health check |
+Available URLs:
 
----
+- API docs: `http://localhost:8000/docs`
+- Admin UI: `http://localhost:8000/admin`
+- Health check: `http://localhost:8000/health`
 
-## Environment Variables
+## Tutorial
 
-| Variable | Description | Default |
+### A. Test the server health
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected result:
+
+- `gemini` is `configured` if the API key is set
+- `chromadb` reports the current chunk count
+- `sqlite` should be `ok`
+
+### B. Chat with demo authentication
+
+Use one of the built-in demo keys:
+
+- `demo_employee_001`
+- `demo_hr_001`
+- `demo_manager_001`
+- `demo_admin_001`
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/chat ^
+  -H "Content-Type: application/json" ^
+  -H "X-API-Key: demo_hr_001" ^
+  -d "{\"message\":\"Ai dang nghi phep hom nay?\",\"session_id\":\"demo-1\"}"
+```
+
+### C. Ingest documents into the vector store
+
+Place files in `data/docs/` or upload through the API.
+
+Supported formats:
+
+- `.pdf`
+- `.docx`
+- `.txt`
+
+Ingest all documents already present in `data/docs`:
+
+```bash
+curl -X POST http://localhost:8000/api/documents/ingest-all ^
+  -H "X-API-Key: demo_hr_001"
+```
+
+Upload a single file:
+
+```bash
+curl -X POST http://localhost:8000/api/documents/ingest ^
+  -H "X-API-Key: demo_admin_001" ^
+  -F "file=@data/docs/Handbook.pdf" ^
+  -F "title=Employee Handbook" ^
+  -F "category=policy" ^
+  -F "access_level=all" ^
+  -F "department=general"
+```
+
+### D. Ask a document question
+
+```bash
+curl -X POST http://localhost:8000/api/chat ^
+  -H "Content-Type: application/json" ^
+  -H "X-API-Key: demo_employee_001" ^
+  -d "{\"message\":\"Quy dinh nghi phep nam nhu the nao?\",\"session_id\":\"demo-2\"}"
+```
+
+If relevant chunks exist in ChromaDB, the response will include `sources`.
+
+### E. Query direct employee endpoints
+
+```bash
+curl http://localhost:8000/api/employees/on-leave -H "X-API-Key: demo_hr_001"
+curl http://localhost:8000/api/employees/stats -H "X-API-Key: demo_manager_001"
+curl http://localhost:8000/api/employees/EMP001/status -H "X-API-Key: demo_employee_001"
+```
+
+## API Summary
+
+| Method | Endpoint | Purpose |
 |---|---|---|
-| `GOOGLE_API_KEY` | Gemini API key **(required)** | — |
-| `LOCAL_EMBEDDING_MODEL` | HuggingFace embedding model | `BAAI/bge-m3` |
-| `RERANKER_MODEL` | Cross-encoder reranker model | `BAAI/bge-reranker-v2-m3` |
-| `USE_RERANKER` | Enable / disable reranking | `true` |
-| `RERANKER_MIN_SCORE` | Minimum reranker score (0–1) | `0.3` |
-| `DATABASE_URL` | SQLite connection string | `sqlite:///data/sqlite/hr.db` |
-| `CHROMA_PERSIST_DIR` | ChromaDB storage directory | `data/chroma` |
-| `DOCS_DIR` | Source documents directory | `data/docs` |
-| `FIREBASE_PROJECT_ID` | Firebase project ID | — |
-| `FIREBASE_CREDENTIALS_PATH` | Path to service account JSON | `firebase-service-account.json` |
-
----
+| `GET` | `/` | Service index |
+| `GET` | `/health` | Health and dependency status |
+| `POST` | `/api/chat` | Main chatbot endpoint |
+| `POST` | `/api/documents/ingest` | Upload and ingest one document |
+| `POST` | `/api/documents/ingest-all` | Ingest all files in `data/docs` |
+| `GET` | `/api/documents/stats` | Vector store statistics |
+| `GET` | `/api/employees` | Filterable employee list |
+| `GET` | `/api/employees/{employee_code}/status` | Employee detail by code |
+| `GET` | `/api/employees/on-leave` | Employees currently on leave |
+| `GET` | `/api/employees/expiring-contracts` | Contracts near expiration |
+| `GET` | `/api/employees/stats` | Aggregate HR stats |
+| `POST` | `/api/notify` | Send an FCM push notification |
 
 ## Authentication
 
-### Demo mode (local development)
+### Demo mode
 
-Pass one of the following keys in the `X-API-Key` header:
+For local development, send:
 
-| Key | Role | Department |
-|---|---|---|
-| `demo_employee_001` | employee | engineering |
-| `demo_hr_001` | hr | hr |
-| `demo_manager_001` | manager | engineering |
-| `demo_admin_001` | admin | management |
+```http
+X-API-Key: demo_hr_001
+```
 
-### Production mode
+### Firebase mode
+
+For production-style authentication, send:
 
 ```http
 Authorization: Bearer <firebase_id_token>
 ```
 
----
+The backend verifies the token and then resolves the caller role from Firestore `Users`.
 
-## API Reference
+## Environment Variables
 
-### Send a message
+See `.env.example` for the full template.
 
-```http
-POST /api/chat
-X-API-Key: demo_employee_001
-Content-Type: application/json
+Common variables:
 
-{
-  "message": "What is the annual leave policy?",
-  "session_id": "sess_001"
-}
-```
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_API_KEY` | Gemini API key |
+| `FIREBASE_PROJECT_ID` | Firebase project id |
+| `FIREBASE_CREDENTIALS_PATH` | Local service account JSON path |
+| `DATABASE_URL` | SQLAlchemy DB URL |
+| `CHROMA_PERSIST_DIR` | Chroma persistence directory |
+| `DOCS_DIR` | Document folder for ingestion |
+| `APP_ENV` | Environment label |
+| `APP_DEBUG` | Enables SQL echo and debug behavior |
 
-```json
-{
-  "answer": "Employees are entitled to 12 days of annual leave per year...",
-  "intent": "document_qa",
-  "sources": [
-    { "title": "Company Handbook", "page": 12, "file": "handbook.pdf" }
-  ],
-  "error": null
-}
-```
+## Notes for Public GitHub
 
-### Other endpoints
+- Do not commit real `.env` values
+- Do not commit real Firebase service account files
+- Do not commit sensitive internal HR documents into `data/docs`
+- Demo data in SQLite is synthetic and should stay separate from production data
 
-| Method | Endpoint | Auth required | Description |
-|---|---|---|---|
-| `GET` | `/health` | No | Service health check |
-| `POST` | `/api/chat` | Yes | Main chat endpoint |
-| `POST` | `/api/docs/ingest` | admin | Upload and index a document |
-| `GET` | `/api/docs/stats` | Yes | Vector store statistics |
-| `GET` | `/api/employees` | hr · manager · admin | List employees |
-| `GET` | `/api/employees/on-leave` | hr · manager · admin | Employees currently on leave |
-| `GET` | `/api/logs` | admin | Query history and latency log |
-| `POST` | `/api/notify` | hr · admin | Send push notification via FCM |
+## Limitations
 
----
+- Conversation memory is in-process only and resets on restart
+- Response cache is in-memory only
+- Intent classification is heuristic-first, then LLM fallback
+- No automated test suite is currently wired into the repo
 
-## Ingesting Documents
+## Development Notes
 
-Place files in `data/docs/` or upload via API. Supported formats: `.pdf`, `.docx`, `.txt`
+- `app/services/rag_service.py` is the main orchestration layer
+- `app/services/firestore_employee_service.py` is the production-style HR data adapter
+- `app/services/employee_service.py` is the local SQLite fallback
+- `app/services/ingest_service.py` handles chunking, embeddings, and Chroma writes
 
-```bash
-curl -X POST http://localhost:8000/api/docs/ingest \
-  -H "X-API-Key: demo_admin_001" \
-  -F "file=@data/docs/handbook.pdf" \
-  -F "category=policy" \
-  -F "access_level=all"
-```
+## License
 
-Access levels: `all` (visible to everyone) or a specific role (`hr`, `manager`, `admin`).
-
----
-
-## Extending Intent Classification
-
-The intent classifier uses embedding k-NN — no code changes needed to add new phrasings.
-
-Edit `app/data/intent_examples.json` and restart the server:
-
-```json
-{
-  "employee_status": [
-    "Who is on leave today?",
-    "Show me the attendance list for this morning"
-  ],
-  "document_qa": [
-    "How many days of annual leave do I get?",
-    "What is the remote work policy?"
-  ],
-  "out_of_scope": [
-    "What is the weather like today?",
-    "Recommend a restaurant near me"
-  ]
-}
-```
-
-To add a new intent category, add a new key with at least 10–15 example questions and restart.
-
----
-
-## Testing
-
-```bash
-# Run all ground-truth questions and report latency
-python scripts/test_ground_truth.py
-
-# Run only the first 5 questions
-python scripts/test_ground_truth.py --count 5
-
-# Filter by topic
-python scripts/test_ground_truth.py --topic leave_policy
-
-# Use a different API key
-python scripts/test_ground_truth.py --api-key demo_hr_001
-
-# Save results to a JSON file
-python scripts/test_ground_truth.py --output results.json
-```
-
-The script reports per-question latency and aggregate stats (avg, p95, min, max). It does not evaluate answer correctness — use an LLM-based evaluator for semantic scoring.
-
----
-
-## Project Structure
-
-```
-hr-rag-chatbot/
-├── app/
-│   ├── api/
-│   │   ├── routes_chat.py           # POST /api/chat
-│   │   ├── routes_docs.py           # Document ingestion
-│   │   ├── routes_employee.py       # Employee data endpoints
-│   │   ├── routes_logs.py           # Query log viewer
-│   │   ├── routes_notify.py         # FCM notifications
-│   │   └── routes_health.py         # Health check
-│   ├── core/
-│   │   ├── config.py                # Settings singleton
-│   │   └── security.py              # Auth — demo keys + Firebase
-│   ├── data/
-│   │   └── intent_examples.json     # k-NN classifier training examples
-│   ├── db/
-│   │   ├── models.py                # SQLAlchemy table definitions
-│   │   ├── session.py               # DB session factory
-│   │   └── seed.py                  # Demo data seeder
-│   ├── prompts/
-│   │   ├── system_prompt.txt        # LLM system instructions
-│   │   ├── answer_prompt.txt        # Answer generation template
-│   │   └── router_prompt.txt        # Intent classification prompt
-│   ├── services/
-│   │   ├── rag_service.py           # Main orchestration layer
-│   │   ├── intent_service.py        # Intent classification (regex + LLM)
-│   │   ├── intent_classifier_service.py  # BGE-M3 k-NN classifier
-│   │   ├── retriever_service.py     # ChromaDB vector search + RBAC
-│   │   ├── reranker_service.py      # Cross-encoder reranking
-│   │   ├── embedding_service.py     # BGE-M3 embedding wrapper
-│   │   ├── ingest_service.py        # Document ingestion pipeline
-│   │   ├── gemini_service.py        # Gemini LLM client
-│   │   ├── employee_service.py      # SQLite HR queries
-│   │   └── firestore_employee_service.py  # Firestore HR queries
-│   ├── static/                      # Admin UI (HTML)
-│   └── main.py                      # App entry point + startup warmup
-├── data/
-│   ├── docs/                        # Source documents (PDF, DOCX, TXT)
-│   ├── chroma/                      # ChromaDB vector store (auto-created)
-│   └── sqlite/                      # SQLite database (auto-created)
-├── scripts/
-│   └── test_ground_truth.py         # End-to-end latency test runner
-├── .env.example
-├── requirements.txt
-└── CHANGES.md
-```
-
----
-
-## Known Limitations
-
-- **In-process cache** — intent and response caches are not shared across multiple Uvicorn workers
-- **No rate limiting** — the `/api/chat` endpoint has no request throttling
-- **CORS** — currently allows all origins (`*`); restrict for production
-- **Gemini latency** — API response time is variable (5–19 s) and outside server control
-- **`.doc` format** — legacy Word files require MS Word COM automation (Windows only); use `.docx` instead
+Add your preferred license before publishing publicly.

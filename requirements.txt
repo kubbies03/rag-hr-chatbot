@@ -9,16 +9,10 @@ langchain==0.3.*
 langchain-google-genai>=2.0.0
 langchain-community==0.3.*
 
-# === LOCAL EMBEDDINGS ===
-sentence-transformers>=3.0.0
-
-# === WINDOWS UTILITIES ===
-pywin32
-
 # === VECTOR DB ===
 chromadb==0.6.*
 
-# === DOCUMENT LOADERS ===
+# === ĐỌC TÀI LIỆU ===
 pypdf==5.*
 python-docx==1.*
 
@@ -28,6 +22,6 @@ sqlalchemy==2.*
 # === AUTH ===
 firebase-admin==6.*
 
-# === UTILITIES ===
+# === TIỆN ÍCH ===
 httpx==0.28.*
 python-multipart==0.0.*

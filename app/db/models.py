@@ -1,9 +1,15 @@
-"""Database table definitions."""
+"""
+models.py — Database table definitions.
 
-from datetime import datetime
+3 main tables:
+- employees: employee information
+- attendance: daily check-in/out records
+- leave_requests: leave request management
+"""
 
-from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Float
 from sqlalchemy.orm import DeclarativeBase, relationship
+from datetime import datetime
 
 
 class Base(DeclarativeBase):
@@ -11,27 +17,28 @@ class Base(DeclarativeBase):
 
 
 class Employee(Base):
-    """Employee table."""
+    """Employee table — stores basic employee information."""
 
     __tablename__ = "employees"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    employee_code = Column(String, unique=True, nullable=False)
+    employee_code = Column(String, unique=True, nullable=False)   # "EMP001"
     name = Column(String, nullable=False)
     email = Column(String, unique=True)
     phone = Column(String)
-    department = Column(String, nullable=False)
-    position = Column(String, nullable=False)
-    status = Column(String, default="active")
-    contract_type = Column(String, default="full_time")
+    department = Column(String, nullable=False)                    # "engineering"
+    position = Column(String, nullable=False)                      # "Backend Developer"
+    status = Column(String, default="active")                      # active, on_leave, resigned, probation
+    contract_type = Column(String, default="full_time")            # full_time, part_time, intern
     contract_start = Column(Date)
-    contract_end = Column(Date)
+    contract_end = Column(Date)                                    # NULL = indefinite
     created_at = Column(DateTime, default=datetime.utcnow)
 
     attendances = relationship("Attendance", back_populates="employee")
     leave_requests = relationship("LeaveRequest", back_populates="employee")
 
     def to_dict(self) -> dict:
+        """Convert to dict for use in LLM prompts."""
         return {
             "employee_code": self.employee_code,
             "name": self.name,
@@ -45,16 +52,16 @@ class Employee(Base):
 
 
 class Attendance(Base):
-    """Attendance table."""
+    """Attendance table — daily check-in/out records."""
 
     __tablename__ = "attendance"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
     date = Column(Date, nullable=False)
-    check_in = Column(String)
-    check_out = Column(String)
-    type = Column(String, default="office")
+    check_in = Column(String)      # "08:30"
+    check_out = Column(String)     # "17:30"
+    type = Column(String, default="office")  # office, remote, onsite, absent
     note = Column(String)
 
     employee = relationship("Employee", back_populates="attendances")
@@ -70,37 +77,8 @@ class Attendance(Base):
         }
 
 
-class QueryLog(Base):
-    """Audit log for chat questions."""
-
-    __tablename__ = "query_logs"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, index=True, nullable=False)
-    user_name = Column(String, nullable=False)
-    role = Column(String, nullable=False)
-    department = Column(String)
-    session_id = Column(String)
-    question = Column(Text, nullable=False)
-    intent = Column(String)
-    response_time_ms = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-
-
-class ConversationMessage(Base):
-    """Persistent chat history."""
-
-    __tablename__ = "conversation_messages"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String, index=True, nullable=False)
-    role = Column(String, nullable=False)
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-
-
 class LeaveRequest(Base):
-    """Leave request table."""
+    """Leave request table — manages leave applications."""
 
     __tablename__ = "leave_requests"
 
@@ -108,8 +86,8 @@ class LeaveRequest(Base):
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    type = Column(String, nullable=False)
-    status = Column(String, default="pending")
+    type = Column(String, nullable=False)        # annual, sick, personal, maternity
+    status = Column(String, default="pending")   # pending, approved, rejected
     reason = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 

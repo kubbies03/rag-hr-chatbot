@@ -1,67 +1,33 @@
-"""Local embedding wrapper using SentenceTransformer directly."""
+"""
+embedding_service.py — Gemini Embedding API wrapper.
 
-import threading
-import torch
-from sentence_transformers import SentenceTransformer
+Converts text into numerical vectors for semantic similarity search.
+"""
 
-_embed_cache = threading.local()
-
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from app.core.config import settings
 
-_model: SentenceTransformer | None = None
+_embeddings = None
 
 
-def _get_model() -> SentenceTransformer:
-    """Return the singleton SentenceTransformer model."""
-    global _model
-    if _model is None:
-        _model = SentenceTransformer(
-            settings.LOCAL_EMBEDDING_MODEL,
-            device="cuda",
-            model_kwargs={"torch_dtype": torch.float16},
+def get_embeddings() -> GoogleGenerativeAIEmbeddings:
+    """Get singleton Gemini Embedding model instance."""
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = GoogleGenerativeAIEmbeddings(
+            model=settings.GEMINI_EMBEDDING_MODEL,
+            google_api_key=settings.GOOGLE_API_KEY,
         )
-    return _model
-
-
-def get_embeddings():
-    """Return the model instance used by ingest and retriever services."""
-    return _EmbeddingsAdapter(_get_model())
-
-
-class _EmbeddingsAdapter:
-    """Expose the embed_query and embed_documents interface expected by callers."""
-
-    def __init__(self, model: SentenceTransformer):
-        self._model = model
-
-    def embed_query(self, text: str) -> list[float]:
-        cached = getattr(_embed_cache, 'last', None)
-        if cached is not None and cached[0] == text:
-            return cached[1]
-        vec = self._model.encode(
-            [text],
-            normalize_embeddings=True,
-            batch_size=1,
-            convert_to_numpy=True,
-        )
-        result = vec[0].tolist()
-        _embed_cache.last = (text, result)
-        return result
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        vecs = self._model.encode(
-            texts,
-            normalize_embeddings=True,
-            batch_size=32,
-            convert_to_numpy=True,
-            show_progress_bar=len(texts) > 50,
-        )
-        return vecs.tolist()
+    return _embeddings
 
 
 def embed_query(text: str) -> list[float]:
-    return get_embeddings().embed_query(text)
+    """Embed a single query into a vector for ChromaDB similarity search."""
+    embeddings = get_embeddings()
+    return embeddings.embed_query(text)
 
 
 def embed_documents(texts: list[str]) -> list[list[float]]:
-    return get_embeddings().embed_documents(texts)
+    """Embed multiple text chunks into vectors for document ingestion."""
+    embeddings = get_embeddings()
+    return embeddings.embed_documents(texts)

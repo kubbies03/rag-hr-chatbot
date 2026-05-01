@@ -1,62 +1,52 @@
-"""Main chat orchestration layer."""
+"""
+Central chat orchestration layer.
 
-import logging
+This module is the decision point that turns a user message into one of the
+backend's supported execution paths:
+
+1. Classify the intent
+2. For `employee_status`, query Firestore when available, otherwise SQLite
+3. For `document_qa`, retrieve relevant chunks from ChromaDB
+4. Assemble prompt context, recent conversation state, and role information
+5. Call Gemini to generate the final answer
+6. Return answer metadata in a stable API-friendly structure
+
+It also maintains small in-process stores for conversation history and
+document-answer caching.
+"""
+
 import os
-import threading
-import time
+import logging
 from functools import lru_cache
-
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.services.gemini_service import chat
 from app.services.intent_service import classify_intent
-from app.services.retriever_service import (
-    format_context,
-    get_sources,
-    retrieve,
-    retrieve_and_rerank,
-)
+from app.services.gemini_service import chat
+from app.services.retriever_service import retrieve, format_context, get_sources
 
 logger = logging.getLogger(__name__)
 
+# Conversation state is deliberately process-local and short-lived.
+# It improves follow-up questions in dev/demo flows but should not be treated
+# as durable chat storage.
+_conversation_store: dict[str, list[dict]] = {}
 MAX_HISTORY = 3
 
 
-def _get_history(session_id: str, db: Session) -> list[dict]:
-    """Load the last MAX_HISTORY exchanges from the database."""
-    from app.db.models import ConversationMessage
-    rows = (
-        db.query(ConversationMessage)
-        .filter(ConversationMessage.session_id == session_id)
-        .order_by(ConversationMessage.created_at.desc())
-        .limit(MAX_HISTORY * 2)
-        .all()
-    )
-    return [{"role": r.role, "content": r.content} for r in reversed(rows)]
+def _get_history(session_id: str) -> list[dict]:
+    return _conversation_store.get(session_id, [])
 
 
-def _save_history(session_id: str, question: str, answer: str, db: Session):
-    """Persist a question/answer pair to the database."""
-    from app.db.models import ConversationMessage
-    db.add(ConversationMessage(session_id=session_id, role="user", content=question))
-    db.add(ConversationMessage(session_id=session_id, role="assistant", content=answer))
-    db.commit()
+def _save_history(session_id: str, question: str, answer: str):
+    if session_id not in _conversation_store:
+        _conversation_store[session_id] = []
 
+    _conversation_store[session_id].append({"role": "user", "content": question})
+    _conversation_store[session_id].append({"role": "assistant", "content": answer})
 
-def _save_history_async(session_id: str, question: str, answer: str):
-    """Fire-and-forget history save — uses its own session so the request isn't blocked."""
-    def _run():
-        from app.db.session import SessionLocal
-        db = SessionLocal()
-        try:
-            _save_history(session_id, question, answer, db)
-        except Exception:
-            pass
-        finally:
-            db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
+    max_messages = MAX_HISTORY * 2
+    if len(_conversation_store[session_id]) > max_messages:
+        _conversation_store[session_id] = _conversation_store[session_id][-max_messages:]
 
 
 @lru_cache(maxsize=1)
@@ -77,36 +67,27 @@ def _load_answer_prompt() -> str:
         return f.read()
 
 
+# This cache only applies to document QA because retrieval + generation is the
+# most expensive path and repeated policy questions are common during demos.
 _response_cache: dict[str, dict] = {}
-_cache_timestamps: dict[str, float] = {}
 CACHE_MAX_SIZE = 50
-CACHE_TTL_SECONDS = 300
 
 
 def _get_cached(cache_key: str) -> dict | None:
-    if cache_key not in _response_cache:
-        return None
-    if time.time() - _cache_timestamps.get(cache_key, 0) > CACHE_TTL_SECONDS:
-        _response_cache.pop(cache_key, None)
-        _cache_timestamps.pop(cache_key, None)
-        return None
-    return _response_cache[cache_key]
+    return _response_cache.get(cache_key)
 
 
 def _set_cache(cache_key: str, response: dict):
     if len(_response_cache) >= CACHE_MAX_SIZE:
         oldest_key = next(iter(_response_cache))
-        _response_cache.pop(oldest_key, None)
-        _cache_timestamps.pop(oldest_key, None)
+        del _response_cache[oldest_key]
     _response_cache[cache_key] = response
-    _cache_timestamps[cache_key] = time.time()
 
 
 def _use_firestore() -> bool:
-    """Check whether Firestore employee queries are available."""
+    """Return whether Firestore-backed employee queries are available."""
     try:
         from app.core.security import _ensure_firebase
-
         return _ensure_firebase()
     except Exception:
         return False
@@ -165,7 +146,7 @@ def _handle_employee_query_firestore(question: str) -> str:
 
 
 def _handle_employee_query_sqlite(question: str, db: Session) -> str:
-    """Query employee data from SQLite."""
+    """Fallback employee query path backed by local SQLite."""
     from app.services import employee_service
 
     q = question.lower()
@@ -215,14 +196,17 @@ def process_chat(
     session_id: str,
     db: Session,
 ) -> dict:
-    """Run the full chat pipeline and return a JSON-ready response."""
+    """
+    Execute the full chat pipeline and return a JSON-serializable response.
+
+    The function is synchronous by design because most downstream helpers are
+    synchronous. The FastAPI layer runs it in a worker thread.
+    """
     intent = classify_intent(question)
-    history = _get_history(session_id, db)
 
     context = ""
     employee_data = ""
     sources = []
-    cache_key = ""
 
     if intent == "employee_status":
         if _use_firestore():
@@ -233,16 +217,12 @@ def process_chat(
             employee_data = _handle_employee_query_sqlite(question, db)
 
     elif intent == "document_qa":
-        retrieval_query = question
-        cache_key = f"{user_role}:{retrieval_query.lower().strip()}"
+        cache_key = f"{user_role}:{question.lower().strip()}"
         cached = _get_cached(cache_key)
         if cached:
             return cached
 
-        if settings.USE_RERANKER:
-            documents = retrieve_and_rerank(query=retrieval_query, user_role=user_role)
-        else:
-            documents = retrieve(query=retrieval_query, user_role=user_role)
+        documents = retrieve(query=question, user_role=user_role)
         context = format_context(documents)
         sources = get_sources(documents)
 
@@ -254,10 +234,11 @@ def process_chat(
             "sources": [],
             "error": None,
         }
-        _save_history_async(session_id, question, response["answer"])
+        _save_history(session_id, question, response["answer"])
         return response
 
     system_prompt = _load_system_prompt()
+    history = _get_history(session_id)
 
     history_text = ""
     if history:
@@ -289,9 +270,10 @@ def process_chat(
         "error": None,
     }
 
-    _save_history_async(session_id, question, answer)
+    _save_history(session_id, question, answer)
 
-    if intent == "document_qa" and cache_key:
+    if intent == "document_qa":
+        cache_key = f"{user_role}:{question.lower().strip()}"
         _set_cache(cache_key, response)
 
     return response
