@@ -1,23 +1,20 @@
-"""
-retriever_service.py — Retrieve relevant documents from ChromaDB.
+"""Retrieve relevant documents from ChromaDB."""
 
-When a user asks about company documents, this service:
-1. Takes the question
-2. Finds the most similar chunks in ChromaDB
-3. Filters by role (access control)
-4. Returns chunks with metadata
-"""
+import logging
 
 import chromadb
+
 from app.core.config import settings
 from app.services.embedding_service import get_embeddings
+
+logger = logging.getLogger(__name__)
 
 _chroma_client = None
 _collection = None
 
 
 def get_collection():
-    """Get ChromaDB collection (creates if not exists)."""
+    """Return the ChromaDB collection."""
     global _chroma_client, _collection
     if _collection is None:
         _chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
@@ -27,34 +24,14 @@ def get_collection():
     return _collection
 
 
-def retrieve(
-    query: str,
-    user_role: str = "employee",
-    top_k: int = None,
+def _query_chroma(
+    query_vector: list[float],
+    user_role: str,
+    top_k: int,
 ) -> list[dict]:
-    """
-    Find documents relevant to a query.
-
-    Args:
-        query: User question
-        user_role: Role for document filtering (employee, hr, manager, admin)
-        top_k: Number of results to return
-
-    Returns:
-        List of dicts with chunk content + metadata
-    """
-    if top_k is None:
-        top_k = settings.RETRIEVER_TOP_K
-
+    """Run one ChromaDB query and return document records."""
     collection = get_collection()
 
-    if collection.count() == 0:
-        return []
-
-    embeddings = get_embeddings()
-    query_vector = embeddings.embed_query(query)
-
-    # Admin sees all; other roles only see permitted documents
     where_filter = None
     if user_role != "admin":
         where_filter = {
@@ -71,7 +48,6 @@ def retrieve(
             where=where_filter,
         )
     except Exception:
-        # Fallback without filter if metadata is missing
         results = collection.query(
             query_embeddings=[query_vector],
             n_results=top_k,
@@ -87,21 +63,59 @@ def retrieve(
                 "metadata": metadata,
                 "distance": distance,
             })
-
     return documents
 
 
+def retrieve(
+    query: str,
+    user_role: str = "employee",
+    top_k: int = None,
+) -> list[dict]:
+    """Retrieve documents using vector similarity only."""
+    if top_k is None:
+        top_k = settings.RETRIEVER_TOP_K
+
+    if get_collection().count() == 0:
+        return []
+
+    query_vector = get_embeddings().embed_query(query)
+    documents = _query_chroma(query_vector, user_role, top_k)
+
+    logger.debug(
+        "Vector retrieval: top-%d distances = %s",
+        top_k,
+        [round(d["distance"], 3) for d in documents if d["distance"] is not None],
+    )
+    return documents
+
+
+def retrieve_and_rerank(
+    query: str,
+    user_role: str = "employee",
+) -> list[dict]:
+    """Retrieve documents, then rerank the candidates."""
+    from app.services.reranker_service import rerank
+
+    if get_collection().count() == 0:
+        return []
+
+    query_vector = get_embeddings().embed_query(query)
+    candidates = _query_chroma(query_vector, user_role, settings.RETRIEVAL_CANDIDATE_K)
+
+    if not candidates:
+        return []
+
+    logger.debug(
+        "Candidate pool (%d chunks) distances: %s",
+        len(candidates),
+        [round(d["distance"], 3) for d in candidates if d["distance"] is not None],
+    )
+
+    return rerank(query, candidates, top_k=settings.RETRIEVER_TOP_K)
+
+
 def format_context(documents: list[dict]) -> str:
-    """
-    Format document list into a context string for LLM prompts.
-
-    Example output:
-        [Source 1: Company Handbook, page 5]
-        Chunk content...
-
-        [Source 2: HR Policy, page 12]
-        Chunk content...
-    """
+    """Format documents into an LLM context string."""
     if not documents:
         return "No relevant documents found."
 
@@ -118,7 +132,7 @@ def format_context(documents: list[dict]) -> str:
 
 
 def get_sources(documents: list[dict]) -> list[dict]:
-    """Extract source list to return to the client."""
+    """Extract source metadata for the API response."""
     sources = []
     for doc in documents:
         meta = doc["metadata"]
