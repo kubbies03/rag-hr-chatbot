@@ -1,16 +1,17 @@
-"""
-gemini_service.py — Gemini Chat API client with timeout and retry.
-"""
+"""Gemini chat client."""
 
-import signal
+import json
+import re
 import threading
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
 from app.core.config import settings
 
 _llm = None
 
-GEMINI_TIMEOUT = 30  # seconds
+GEMINI_TIMEOUT = 30
 
 
 def get_llm() -> ChatGoogleGenerativeAI:
@@ -65,11 +66,7 @@ def chat(
             elif msg["role"] == "assistant":
                 messages.append(AIMessage(content=msg["content"]))
 
-    if context:
-        full_question = f"{context}\n\n[Cau hoi]: {question}"
-    else:
-        full_question = question
-
+    full_question = f"{context}\n\n[Cau hoi]: {question}" if context else question
     messages.append(HumanMessage(content=full_question))
 
     try:
@@ -89,3 +86,26 @@ def classify(question: str, prompt_template: str) -> str:
         return response.content.strip().lower()
     except Exception:
         return "out_of_scope"
+
+
+def classify_with_keywords(question: str, prompt_template: str) -> tuple[str, str]:
+    """Classify intent and extract retrieval keywords in a single LLM call."""
+    valid_intents = {"employee_status", "document_qa", "out_of_scope"}
+    llm = get_llm()
+    prompt = prompt_template.format(question=question)
+    try:
+        response = _invoke_with_timeout(llm, [HumanMessage(content=prompt)], timeout=10)
+        raw = response.content.strip()
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw).strip()
+        match = re.search(r"\{[^{}]+\}", raw, re.DOTALL)
+        if not match:
+            return "out_of_scope", question
+        data = json.loads(match.group(0))
+        intent = (data.get("intent") or "").strip().lower()
+        keywords = (data.get("keywords") or "").strip()
+        if intent not in valid_intents:
+            intent = "out_of_scope"
+        return intent, keywords or question
+    except Exception:
+        return "out_of_scope", question
