@@ -1,31 +1,25 @@
-"""
-firestore_employee_service.py — Query employee data from Firebase Firestore.
+"""Query employee data from Firestore."""
 
-Fetches live data from the Android app's Firestore collections:
-  - Users: name, role, status, department, position
-  - Attendance: check-in/out records (userId_yyyyMMdd format)
-  - LeaveRequests: leave applications (userName, department, startDate, endDate, status)
-  - Tasks: assignments (employeeId, title, status)
-"""
-
-from datetime import datetime, date
 import logging
+from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
 _firestore_client = None
 _users_cache: dict[str, dict] = {}
 _users_cache_time: float = 0
-USERS_CACHE_TTL = 120  # seconds
+USERS_CACHE_TTL = 120
 
 
 def _get_db():
     global _firestore_client
     if _firestore_client is None:
         from app.core.security import _ensure_firebase
+
         if not _ensure_firebase():
             raise RuntimeError("Firebase not configured")
         from firebase_admin import firestore
+
         _firestore_client = firestore.client()
     return _firestore_client
 
@@ -34,13 +28,10 @@ def _today_str() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-# ============================================================
-# USERS (cached)
-# ============================================================
-
 def _get_all_users_cached() -> dict[str, dict]:
-    """Get all users with a 2-minute cache."""
+    """Return all users with a short cache."""
     import time
+
     global _users_cache, _users_cache_time
 
     if _users_cache and (time.time() - _users_cache_time < USERS_CACHE_TTL):
@@ -85,10 +76,6 @@ def get_employees_by_status(status: str) -> list[dict]:
     users = _get_all_users_cached()
     return [u for u in users.values() if u.get("status") == status]
 
-
-# ============================================================
-# ATTENDANCE (joined with Users for names)
-# ============================================================
 
 def get_today_attendance() -> list[dict]:
     db = _get_db()
@@ -147,10 +134,6 @@ def get_checked_in_users() -> list[dict]:
     return result
 
 
-# ============================================================
-# LEAVE REQUESTS (userName already stored in Firestore)
-# ============================================================
-
 def get_pending_leave_requests() -> list[dict]:
     db = _get_db()
     docs = db.collection("LeaveRequests").where("status", "==", "pending").stream()
@@ -192,10 +175,6 @@ def get_approved_leaves_today() -> list[dict]:
     return on_leave
 
 
-# ============================================================
-# TASKS
-# ============================================================
-
 def get_all_tasks() -> list[dict]:
     db = _get_db()
     docs = db.collection("Tasks").stream()
@@ -217,10 +196,6 @@ def get_tasks_by_employee(employee_id: str) -> list[dict]:
     docs = db.collection("Tasks").where("employeeId", "==", employee_id).stream()
     return [_format_task(doc) for doc in docs]
 
-
-# ============================================================
-# STATS
-# ============================================================
 
 def get_all_stats() -> dict:
     users = get_all_users()
@@ -245,10 +220,6 @@ def get_all_stats() -> dict:
 
     return result
 
-
-# ============================================================
-# Format helpers
-# ============================================================
 
 def format_employee_data(data) -> str:
     if not data:
@@ -280,7 +251,7 @@ def format_employee_data(data) -> str:
 
 
 def _is_vietnamese(key: str) -> bool:
-    return " " in key or any(c in key for c in "àáạảãăắằặẳẵâấầậẩẫ")
+    return " " in key or any(c in key for c in "Ã Ã¡áº¡áº£Ã£Äƒáº¯áº±áº·áº³áºµÃ¢áº¥áº§áº­áº©áº«")
 
 
 def _vn_key(key: str) -> str:

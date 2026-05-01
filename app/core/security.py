@@ -1,25 +1,10 @@
-"""
-Authentication and caller identity resolution.
-
-The module supports two modes behind the same dependency:
-
-1. Demo mode
-   - Reads `X-API-Key`
-   - Maps directly to in-memory demo users
-   - Used for local development, demos, and API smoke tests
-
-2. Firebase mode
-   - Reads `Authorization: Bearer <token>`
-   - Verifies the Firebase ID token
-   - Loads role and profile information from Firestore `Users`
-
-The exported dependency returns a normalized user dictionary so route handlers
-do not need to know which auth backend was used.
-"""
+"""Authentication and caller resolution."""
 
 import os
 import time
+
 from fastapi import Header, HTTPException
+
 from app.core.config import settings
 
 DEMO_USERS = {
@@ -49,11 +34,9 @@ DEMO_USERS = {
     },
 }
 
-# Small in-memory cache to avoid a Firestore role lookup on every request.
-# This is process-local only; it is a latency optimization, not a source of truth.
 _role_cache: dict[str, dict] = {}
 _role_cache_ts: dict[str, float] = {}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 300
 
 
 def _get_cached_role(uid: str) -> dict | None:
@@ -70,9 +53,6 @@ def _set_cached_role(uid: str, user_info: dict):
     _role_cache_ts[uid] = time.time()
 
 
-# Firebase Admin initialization is lazy so demo mode can run without requiring
-# service-account setup. The function returns `False` instead of throwing so
-# callers can gracefully fall back to demo or SQLite paths when appropriate.
 _firebase_initialized = False
 
 
@@ -105,17 +85,7 @@ async def get_current_user(
     x_api_key: str = Header(default=None, alias="X-API-Key"),
     authorization: str = Header(default=None),
 ) -> dict:
-    """
-    Resolve the caller into a normalized application user object.
-
-    Return shape:
-        {
-            "user_id": "...",
-            "name": "...",
-            "role": "employee|hr|manager|admin",
-            "department": "..."
-        }
-    """
+    """Resolve the caller into a normalized user object."""
     if x_api_key and x_api_key in DEMO_USERS:
         return DEMO_USERS[x_api_key]
 

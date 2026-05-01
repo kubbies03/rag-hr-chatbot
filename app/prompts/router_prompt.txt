@@ -1,9 +1,9 @@
-Phân loại câu hỏi người dùng vào 1 trong 3 nhãn:
-1. employee_status — câu hỏi về trạng thái, chấm công, nghỉ phép, hợp đồng của nhân viên cụ thể
-2. document_qa — câu hỏi về nội quy, quy định, chính sách, kế hoạch, handbook công ty
-3. out_of_scope — câu hỏi ngoài phạm vi nhân sự và tài liệu công ty
+Classify the user's question into one of these 3 labels:
+1. employee_status - questions about a specific employee's status, attendance, leave, or contract
+2. document_qa - questions about internal rules, policies, procedures, plans, or the company handbook
+3. out_of_scope - questions outside the scope of HR and company documents
 
-Chỉ trả về đúng 1 nhãn, không giải thích.
+Return exactly 1 label only, without explanation.
 
-Câu hỏi:
+Question:
 {question}
