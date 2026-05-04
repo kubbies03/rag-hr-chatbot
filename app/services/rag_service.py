@@ -216,7 +216,12 @@ def process_chat(
     db: Session,
 ) -> dict:
     """Run the full chat pipeline and return a JSON-ready response."""
+    t0 = time.time()
+
     intent = classify_intent(question)
+    logger.info("[TIMING] intent_classify=%.2fs intent=%s", time.time() - t0, intent)
+    t1 = time.time()
+
     history = _get_history(session_id, db)
 
     context = ""
@@ -231,6 +236,7 @@ def process_chat(
         else:
             logger.info("Fallback: querying employee data from SQLite")
             employee_data = _handle_employee_query_sqlite(question, db)
+        logger.info("[TIMING] employee_query=%.2fs", time.time() - t1)
 
     elif intent == "document_qa":
         retrieval_query = question
@@ -245,6 +251,7 @@ def process_chat(
             documents = retrieve(query=retrieval_query, user_role=user_role)
         context = format_context(documents)
         sources = get_sources(documents)
+        logger.info("[TIMING] retrieval=%.2fs", time.time() - t1)
 
     elif intent == "out_of_scope":
         response = {
@@ -277,10 +284,13 @@ def process_chat(
         question=question,
     )
 
+    t2 = time.time()
     answer = chat(
         question=full_context,
         system_prompt=system_prompt,
     )
+    logger.info("[TIMING] gemini=%.2fs", time.time() - t2)
+    logger.info("[TIMING] total_pipeline=%.2fs", time.time() - t0)
 
     response = {
         "answer": answer,

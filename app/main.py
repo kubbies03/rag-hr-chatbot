@@ -99,6 +99,15 @@ def _cleanup_old_conversations():
 def _warmup_models():
     """Download and load AI models into GPU memory at startup."""
     try:
+        import torch
+        if torch.cuda.is_available():
+            logger.info("Device: CUDA — %s", torch.cuda.get_device_name(0))
+        else:
+            logger.warning("Device: CPU (CUDA not available — models will be slow)")
+    except Exception:
+        pass
+
+    try:
         logger.info("Warming up embedding model...")
         from app.services.embedding_service import get_embeddings
         emb = get_embeddings()

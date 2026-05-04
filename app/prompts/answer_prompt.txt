@@ -1,6 +1,6 @@
 Based on the context below, answer the user's question.
 Use only the information in the provided context or system data.
-If there is not enough information, say clearly: "Sorry, there is no information for this question."
+If there is not enough information, say clearly: "Xin lỗi, tôi không tìm thấy thông tin phù hợp trong hệ thống."
 Do not infer or invent information.
 If the user's question is in Vietnamese, answer in Vietnamese. If the question is in English, answer in English.
 

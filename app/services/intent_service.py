@@ -37,6 +37,17 @@ DOCUMENT_KEYWORDS = [
     r"nội quy",
     r"chính sách",
     r"handbook",
+    r"cơ cấu",
+    r"co cau",
+    r"(cấp bậc|cap bac)",
+    r"(chức danh|chuc danh)",
+    r"(sơ đồ|so do).*(tổ chức|to chuc)",
+    r"(thăng chức|thang chuc)",
+    r"(lộ trình|lo trinh).*(thăng tiến|thang tien)",
+    r"(đào tạo|dao tao)",
+    r"(tuyển dụng|tuyen dung)",
+    r"(hợp đồng|hop dong).*(lao động|lao dong)",
+    r"(phòng ban|phong ban)",
     r"(được|không được|có được).*(nghỉ|remote|phép|ot)",
     r"quyền lợi",
     r"nghĩa vụ",
@@ -94,18 +105,20 @@ CASUAL_KEYWORDS = [
     r"cần nộp gì khi nghỉ việc",
 ]
 
-
-@lru_cache(maxsize=1)
-def _load_router_prompt() -> str:
-    prompt_path = os.path.join(
-        os.path.dirname(__file__), "..", "prompts", "router_prompt.txt",
-    )
-    with open(prompt_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-_intent_cache: dict[str, str] = {}
-_INTENT_CACHE_MAX = 200
+OUT_OF_SCOPE_KEYWORDS = [
+    r"thời tiết",
+    r"(nấu ăn|công thức|món)",
+    r"(bóng đá|thể thao|kết quả.*trận)",
+    r"(bitcoin|chứng khoán|giá vàng|crypto)",
+    r"(đặt vé|đặt phòng|du lịch)",
+    r"(viết code|lập trình|debug|javascript|python(?!.*hr|.*nhân))",
+    r"(phim|nhạc|game|giải trí)",
+    r"(ăn gì|uống gì|quán)",
+    r"(mua.*điện thoại|laptop|máy tính(?!.*công ty))",
+    r"(tin tức|thời sự|chính trị)",
+    r"(dịch.*sang|translate)",
+    r"(bài thơ|truyện|sáng tác)",
+]
 
 
 def normalize(q: str) -> str:
@@ -116,7 +129,15 @@ def normalize(q: str) -> str:
 
 
 def classify_intent(question: str) -> str:
-    """Classify a question into an intent."""
+    """Classify a question into an intent.
+
+    Priority:
+    1. k-NN embedding classifier (fast, accurate for known patterns)
+    2. Regex: employee_status signals
+    3. Regex: document_qa signals
+    4. Regex: clearly out-of-scope signals
+    5. Default → document_qa (let RAG decide if info exists)
+    """
     q = normalize(question)
 
     try:
@@ -126,6 +147,10 @@ def classify_intent(question: str) -> str:
     except Exception:
         pass
 
+    for pattern in EMPLOYEE_KEYWORDS:
+        if re.search(pattern, q):
+            return "employee_status"
+
     for pattern in PROCEDURE_KEYWORDS:
         if re.search(pattern, q):
             return "document_qa"
@@ -134,27 +159,12 @@ def classify_intent(question: str) -> str:
         if re.search(pattern, q):
             return "document_qa"
 
-    for pattern in EMPLOYEE_KEYWORDS:
-        if re.search(pattern, q):
-            return "employee_status"
-
     for pattern in CASUAL_KEYWORDS:
         if re.search(pattern, q):
             return "document_qa"
 
-    if q in _intent_cache:
-        return _intent_cache[q]
+    for pattern in OUT_OF_SCOPE_KEYWORDS:
+        if re.search(pattern, q):
+            return "out_of_scope"
 
-    try:
-        prompt_template = _load_router_prompt()
-        result = classify(question, prompt_template)
-        valid_intents = {"employee_status", "document_qa", "out_of_scope"}
-        if result not in valid_intents:
-            result = "out_of_scope"
-    except Exception:
-        result = "out_of_scope"
-
-    if len(_intent_cache) >= _INTENT_CACHE_MAX:
-        _intent_cache.pop(next(iter(_intent_cache)))
-    _intent_cache[q] = result
-    return result
+    return "document_qa"
