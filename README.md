@@ -1,6 +1,6 @@
 # HR RAG Chatbot
 
-HR chatbot backend for employee status queries and internal policy questions using a hybrid RAG pipeline.
+Backend server for an Android HR application. Handles employee status queries and internal policy questions using a hybrid RAG pipeline, serving JSON responses to the Android client via API.
 
 ## Overview
 
@@ -8,7 +8,7 @@ HR chatbot backend for employee status queries and internal policy questions usi
 - Policy and procedure questions are answered from ingested internal documents.
 - Out-of-scope questions are politely declined.
 
-The system uses a three-stage intent classifier, vector retrieval, optional reranking, and Gemini-based answer generation.
+The Android app authenticates users via Firebase Auth and sends requests to this server with a Bearer token. The server uses a three-stage intent classifier, vector retrieval, optional reranking, and Gemini-based answer generation.
 
 ## Architecture
 
@@ -78,6 +78,8 @@ Pass one of the demo keys in the `X-API-Key` header.
 | `demo_admin_001` | admin |
 
 ### Production mode
+
+The Android app obtains a Firebase ID token after login and attaches it to every request:
 
 ```http
 Authorization: Bearer <firebase_id_token>
