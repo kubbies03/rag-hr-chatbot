@@ -1,4 +1,4 @@
-"""Query log endpoints — HR/admin only."""
+"""Query log endpoints HR/admin only."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session

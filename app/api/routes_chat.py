@@ -4,7 +4,7 @@ import asyncio
 import time
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -18,7 +18,7 @@ REQUEST_TIMEOUT = 45
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=2000)
     session_id: str = "default"
 
     class Config:

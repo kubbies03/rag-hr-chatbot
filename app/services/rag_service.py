@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 import time
+import unicodedata
 from functools import lru_cache
 
 from sqlalchemy.orm import Session
@@ -20,17 +21,15 @@ from app.services.retriever_service import (
 
 logger = logging.getLogger(__name__)
 
-MAX_HISTORY = 3
-
 
 def _get_history(session_id: str, db: Session) -> list[dict]:
-    """Load the last MAX_HISTORY exchanges from the database."""
+    """Load the last MAX_CONVERSATION_HISTORY exchanges from the database."""
     from app.db.models import ConversationMessage
     rows = (
         db.query(ConversationMessage)
         .filter(ConversationMessage.session_id == session_id)
         .order_by(ConversationMessage.created_at.desc())
-        .limit(MAX_HISTORY * 2)
+        .limit(settings.MAX_CONVERSATION_HISTORY * 2)  # Fix 4: use settings value
         .all()
     )
     return [{"role": r.role, "content": r.content} for r in reversed(rows)]
@@ -52,7 +51,7 @@ def _save_history_async(session_id: str, question: str, answer: str):
         try:
             _save_history(session_id, question, answer, db)
         except Exception:
-            pass
+            logger.warning("Failed to save conversation history for session %s", session_id)
         finally:
             db.close()
 
@@ -79,27 +78,36 @@ def _load_answer_prompt() -> str:
 
 _response_cache: dict[str, dict] = {}
 _cache_timestamps: dict[str, float] = {}
+_cache_lock = threading.Lock()  # Fix 2: protect shared dicts from concurrent writes
 CACHE_MAX_SIZE = 50
 CACHE_TTL_SECONDS = 300
 
 
 def _get_cached(cache_key: str) -> dict | None:
-    if cache_key not in _response_cache:
-        return None
-    if time.time() - _cache_timestamps.get(cache_key, 0) > CACHE_TTL_SECONDS:
-        _response_cache.pop(cache_key, None)
-        _cache_timestamps.pop(cache_key, None)
-        return None
-    return _response_cache[cache_key]
+    with _cache_lock:  # Fix 2
+        if cache_key not in _response_cache:
+            return None
+        if time.time() - _cache_timestamps.get(cache_key, 0) > CACHE_TTL_SECONDS:
+            _response_cache.pop(cache_key, None)
+            _cache_timestamps.pop(cache_key, None)
+            return None
+        return _response_cache[cache_key]
 
 
 def _set_cache(cache_key: str, response: dict):
-    if len(_response_cache) >= CACHE_MAX_SIZE:
-        oldest_key = next(iter(_response_cache))
-        _response_cache.pop(oldest_key, None)
-        _cache_timestamps.pop(oldest_key, None)
-    _response_cache[cache_key] = response
-    _cache_timestamps[cache_key] = time.time()
+    with _cache_lock:  # Fix 2
+        if len(_response_cache) >= CACHE_MAX_SIZE:
+            oldest_key = next(iter(_response_cache))
+            _response_cache.pop(oldest_key, None)
+            _cache_timestamps.pop(oldest_key, None)
+        _response_cache[cache_key] = response
+        _cache_timestamps[cache_key] = time.time()
+
+
+def _strip_accents(text: str) -> str:
+    """Normalize Vietnamese text to ASCII for keyword matching."""
+    nfkd = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
 def _use_firestore() -> bool:
@@ -116,7 +124,7 @@ def _handle_employee_query_firestore(question: str) -> str:
     """Query employee data from Firestore."""
     from app.services import firestore_employee_service as fs
 
-    q = question.lower()
+    q = _strip_accents(question)  # Fix 5: normalize diacritics before matching
 
     if any(kw in q for kw in ["nghi phep", "dang nghi", "ai nghi"]):
         data = fs.get_approved_leaves_today()
@@ -168,7 +176,7 @@ def _handle_employee_query_sqlite(question: str, db: Session) -> str:
     """Query employee data from SQLite."""
     from app.services import employee_service
 
-    q = question.lower()
+    q = _strip_accents(question)  # Fix 5: normalize diacritics before matching
 
     if any(kw in q for kw in ["nghi phep", "dang nghi", "ai nghi"]):
         data = employee_service.get_employees_on_leave(db)
@@ -266,21 +274,12 @@ def process_chat(
 
     system_prompt = _load_system_prompt()
 
-    history_text = ""
-    if history:
-        history_parts = []
-        for msg in history:
-            prefix = "Nguoi dung" if msg["role"] == "user" else "Tro ly"
-            history_parts.append(f"{prefix}: {msg['content']}")
-        history_text = "\n".join(history_parts)
-
     answer_template = _load_answer_prompt()
     full_context = answer_template.format(
         role=user_role,
         intent=intent,
         context=context or "Khong co",
         employee_data=employee_data or "Khong co",
-        conversation_history=history_text or "Khong co",
         question=question,
     )
 
@@ -288,6 +287,7 @@ def process_chat(
     answer = chat(
         question=full_context,
         system_prompt=system_prompt,
+        conversation_history=history or None,  # Fix 3: pass as structured messages
     )
     logger.info("[TIMING] gemini=%.2fs", time.time() - t2)
     logger.info("[TIMING] total_pipeline=%.2fs", time.time() - t0)

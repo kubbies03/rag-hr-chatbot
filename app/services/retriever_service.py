@@ -1,6 +1,7 @@
 """Retrieve relevant documents from ChromaDB."""
 
 import logging
+import threading
 
 import chromadb
 
@@ -11,16 +12,19 @@ logger = logging.getLogger(__name__)
 
 _chroma_client = None
 _collection = None
+_collection_lock = threading.Lock()  # Fix 6: thread-safe singleton init
 
 
 def get_collection():
     """Return the ChromaDB collection."""
     global _chroma_client, _collection
     if _collection is None:
-        _chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
-        _collection = _chroma_client.get_or_create_collection(
-            name=settings.CHROMA_COLLECTION_NAME,
-        )
+        with _collection_lock:
+            if _collection is None:  # double-checked locking
+                _chroma_client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
+                _collection = _chroma_client.get_or_create_collection(
+                    name=settings.CHROMA_COLLECTION_NAME,
+                )
     return _collection
 
 
@@ -41,17 +45,14 @@ def _query_chroma(
             ]
         }
 
-    try:
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=top_k,
-            where=where_filter,
-        )
-    except Exception:
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=top_k,
-        )
+    # Fix 1: removed silent fallback that dropped access control on error.
+    # If the filter query fails, let the exception propagate rather than
+    # leaking restricted documents to lower-privileged users.
+    results = collection.query(
+        query_embeddings=[query_vector],
+        n_results=top_k,
+        where=where_filter,
+    )
 
     documents = []
     if results and results["documents"]:

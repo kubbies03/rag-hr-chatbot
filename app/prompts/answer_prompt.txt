@@ -13,8 +13,5 @@ If the user's question is in Vietnamese, answer in Vietnamese. If the question i
 [Employee data from system]:
 {employee_data}
 
-[Conversation history]:
-{conversation_history}
-
 [Question]:
 {question}
