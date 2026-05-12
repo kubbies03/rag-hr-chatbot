@@ -12,14 +12,8 @@ The Android app authenticates users via Firebase Auth and sends requests to this
 
 ## Architecture
 
-```text
-POST /api/chat
-  -> Authentication
-  -> Intent classification
-  -> employee_status or document_qa or out_of_scope
-  -> Retrieval / HR lookup
-  -> Answer generation
-```
+![System Architecture Diagram](docs/System_Architecture_Diagram.png)
+*System Architecture Diagram — Android HR Chatbot RAG Pipeline*
 
 ## Tech Stack
 
