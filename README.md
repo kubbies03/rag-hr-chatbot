@@ -1,4 +1,4 @@
-# HR RAG Chatbot
+# Android HR Chatbot — RAG System
 
 Backend server for an Android HR application. Handles employee status queries and internal policy questions using a hybrid RAG pipeline, serving JSON responses to the Android client via API.
 
