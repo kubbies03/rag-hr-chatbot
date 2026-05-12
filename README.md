@@ -111,22 +111,17 @@ Content-Type: application/json
 
 Edit `app/data/intent_examples.json` and restart the server to add new phrasings or new intent groups.
 
-## Benchmark Results
+Benchmark Results
 
-> Run date: 2026-05-01 | 29 questions | 0 request errors
+Run date: 2026-05-01 | 38 questions | 0 request errors
 
-| Metric | Value |
-|---|---|
-| Overall accuracy | 89.7% (26 / 29) |
-| document_qa | 91.7% (22 / 24) |
-| employee_status | 100% (2 / 2) |
-| out_of_scope | 100% (3 / 3) |
-| Avg latency | 5242 ms |
-| P95 latency | 12439 ms |
+Metric	Value
+Overall accuracy	94.7% (36 / 38)
+document_qa	93.3% (28 / 30)
+employee_status	100% (3 / 3)
+out_of_scope	100% (5 / 5)
 
-> Cached responses return in 30-60 ms. Slow cases (10-12 s) involve live retrieval plus Gemini generation over large context.
-
-> Full report: [docs/ground_truth_test_report_2026-05-01.md](docs/ground_truth_test_report_2026-05-01.md)
+Full report: docs/ground_truth_test_report_2026-05-13.md
 
 ## Project Structure
 
